@@ -185,14 +185,14 @@ export default function LiveFeedPage() {
                                 
                                 // To make this work, replace these with your actual EmailJS keys
                                 emailjs.send(
-                                    'YOUR_SERVICE_ID', 
-                                    'YOUR_TEMPLATE_ID', 
+                                    'service_gewyj2y', 
+                                    'template_tpovemp', 
                                     {
                                         object_class: pred.class.toUpperCase(),
                                         device_name: selectedDevice?.name || 'Camera',
                                         time: format(now, 'HH:mm:ss')
                                     }, 
-                                    'YOUR_PUBLIC_KEY'
+                                    'Zmdyuo3yIL4Iav2ZU'
                                 ).then(
                                     () => console.log('SUCCESS: Email sent via EmailJS'),
                                     (error) => console.log('FAILED to send email via EmailJS (Did you add your keys?)', error)
