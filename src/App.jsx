@@ -36,7 +36,7 @@ function DownloadAppDropdown() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleDownload = (os, fileUrl, filename) => {
+  const handleDownload = (os, fileUrl) => {
     setOpen(false)
     addToast({
       type: 'success',
@@ -44,13 +44,8 @@ function DownloadAppDropdown() {
       message: `Downloading NexusShield for ${os}...`,
     })
     
-    // Trigger actual download
-    const link = document.createElement('a')
-    link.href = fileUrl
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // Trigger actual download securely
+    window.location.assign(fileUrl)
   }
 
   return (
@@ -81,7 +76,7 @@ function DownloadAppDropdown() {
           flexDirection: 'column',
         }}>
           <button 
-            onClick={() => handleDownload('macOS', 'https://github.com/yahyabamo/nexusshield-dashboard2/releases/download/v1.0.0/NexusShield-1.0.0-arm64.dmg', 'NexusShield-macOS.dmg')}
+            onClick={() => handleDownload('macOS', 'https://github.com/yahyabamo/nexusshield-dashboard2/releases/download/v1.0.0/NexusShield-1.0.0-arm64.dmg')}
             style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-primary)', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -89,7 +84,7 @@ function DownloadAppDropdown() {
             Download for macOS (Apple Silicon)
           </button>
           <button 
-            onClick={() => handleDownload('Windows', '/NexusShield-Windows-x64.exe', 'NexusShield-Windows.exe')}
+            onClick={() => handleDownload('Windows', '/NexusShield-Windows-x64.exe')}
             style={{ padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
