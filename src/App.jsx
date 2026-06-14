@@ -81,7 +81,7 @@ function DownloadAppDropdown() {
           flexDirection: 'column',
         }}>
           <button 
-            onClick={() => handleDownload('macOS', '/NexusShield-macOS-arm64.dmg', 'NexusShield-macOS.dmg')}
+            onClick={() => handleDownload('macOS', 'https://github.com/yahyabamo/nexusshield-dashboard2/releases/download/v1.0.0/NexusShield-1.0.0-arm64.dmg', 'NexusShield-macOS.dmg')}
             style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-primary)', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
