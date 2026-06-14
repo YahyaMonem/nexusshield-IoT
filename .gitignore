@@ -24,3 +24,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Desktop Apps
+*.dmg
+*.exe
+dist_electron/

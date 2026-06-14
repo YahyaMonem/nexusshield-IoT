@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import {
   LayoutDashboard, BarChart3, Settings,
   Shield, LogOut, User, Tv2, History,
-  HardDrive, ShieldCheck, ChevronDown
+  HardDrive, ShieldCheck, ChevronDown, Download
 } from 'lucide-react'
 
 import LoginPage from './pages/LoginPage'
@@ -19,7 +19,88 @@ import UserManagementPage from './pages/UserManagementPage'
 import NotificationBell from './components/NotificationBell'
 
 import { AuthContext, useAuth } from './authContext'
-import { ToastProvider } from './toastContext'
+import { ToastProvider, useToast } from './toastContext'
+
+function DownloadAppDropdown() {
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef(null)
+  const { addToast } = useToast()
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleDownload = (os, fileUrl, filename) => {
+    setOpen(false)
+    addToast({
+      type: 'success',
+      title: 'Download Started',
+      message: `Downloading NexusShield for ${os}...`,
+    })
+    
+    // Trigger actual download
+    const link = document.createElement('a')
+    link.href = fileUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="btn btn-secondary"
+        style={{ padding: '6px 12px', fontSize: 13, gap: 6, display: 'flex', alignItems: 'center' }}
+      >
+        <Download size={14} />
+        Desktop App
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: 0,
+          marginTop: 8,
+          width: 200,
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-secondary)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-xl)',
+          zIndex: 100,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <button 
+            onClick={() => handleDownload('macOS', '/NexusShield-macOS-arm64.dmg', 'NexusShield-macOS.dmg')}
+            style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-primary)', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            Download for macOS (Apple Silicon)
+          </button>
+          <button 
+            onClick={() => handleDownload('Windows', '/NexusShield-Windows-x64.exe', 'NexusShield-Windows.exe')}
+            style={{ padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            Download for Windows
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined)
@@ -244,6 +325,7 @@ function Layout({ children }) {
             <h1 className="page-title">{PAGE_TITLES[location.pathname] || 'Dashboard'}</h1>
           </div>
           <div className="topbar-right">
+            <DownloadAppDropdown />
             <NotificationBell />
             <div className="connection-badge" style={
               realtimeOk
