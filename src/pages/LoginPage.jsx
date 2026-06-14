@@ -27,116 +27,176 @@ export default function LoginPage() {
 
     return (
         <div style={{
-            height: '100vh',
-            background: 'var(--bg-base)',
+            minHeight: '100vh',
+            background: '#ffffff',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-            overflow: 'hidden',
         }}>
-            {/* Background grid */}
+            {/* Left — Form */}
             <div style={{
-                position: 'absolute', inset: 0, opacity: 0.03,
-                backgroundImage: `linear-gradient(var(--accent) 1px, transparent 1px),
-                          linear-gradient(90deg, var(--accent) 1px, transparent 1px)`,
-                backgroundSize: '40px 40px',
-                pointerEvents: 'none',
-            }} />
-
-            {/* Glow */}
-            <div style={{
-                position: 'absolute', width: 400, height: 400,
-                background: 'radial-gradient(circle, rgba(0,229,255,0.06) 0%, transparent 70%)',
-                borderRadius: '50%', pointerEvents: 'none',
-            }} />
-
-            <div style={{
-                maxWidth: 400,
-                width: '90%',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-accent)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 40,
-                position: 'relative',
-                animation: 'slideUp 0.3s ease',
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '48px 24px',
             }}>
-                {/* Logo */}
-                <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                    <div style={{
-                        width: 52, height: 52,
-                        background: 'var(--accent-dim)',
-                        border: '1px solid var(--accent)',
-                        borderRadius: 14,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 16px',
-                    }}>
-                        <Shield size={24} color="var(--accent)" />
+                <div style={{ width: '100%', maxWidth: 360 }}>
+                    {/* Logo */}
+                    <div style={{ marginBottom: 32 }}>
+                        <div style={{
+                            width: 48, height: 48,
+                            background: 'var(--brand-50)',
+                            border: '1px solid var(--brand-100)',
+                            borderRadius: 12,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            marginBottom: 24,
+                        }}>
+                            <Shield size={24} color="var(--brand-600)" />
+                        </div>
+                        <h1 style={{
+                            fontSize: 24,
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            marginBottom: 8,
+                            letterSpacing: '-0.02em',
+                        }}>
+                            Log in to your account
+                        </h1>
+                        <p style={{
+                            fontSize: 16,
+                            color: 'var(--text-tertiary)',
+                            lineHeight: 1.5,
+                        }}>
+                            Welcome back! Please enter your details.
+                        </p>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '0.05em' }}>nexusshield</div>
-                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.15em' }}>
-                        IoT SECURITY DASHBOARD
-                    </div>
-                </div>
 
-                {/* Form */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div>
-                        <label className="label">Email</label>
-                        <input
-                            className="input"
-                            type="email"
-                            placeholder="admin@example.com"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="label">Password</label>
-                        <div style={{ position: 'relative' }}>
+                    {/* Form */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                        <div>
+                            <label className="label">Email</label>
                             <input
                                 className="input"
-                                type={showPw ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
+                                type="email"
+                                placeholder="Enter your email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
                                 onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                                style={{ paddingRight: 42 }}
                             />
-                            <button
-                                onClick={() => setShowPw(p => !p)}
-                                style={{
-                                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                                    padding: 0, display: 'flex',
-                                }}
-                            >
-                                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                            </button>
                         </div>
+
+                        <div>
+                            <label className="label">Password</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    className="input"
+                                    type={showPw ? 'text' : 'password'}
+                                    placeholder="Enter your password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                                    style={{ paddingRight: 42 }}
+                                />
+                                <button
+                                    onClick={() => setShowPw(p => !p)}
+                                    type="button"
+                                    style={{
+                                        position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                                        background: 'none', border: 'none', cursor: 'pointer',
+                                        color: 'var(--text-quaternary)', padding: 0, display: 'flex',
+                                    }}
+                                >
+                                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {error && (
+                            <div style={{
+                                background: 'var(--error-50)',
+                                border: '1px solid rgba(240, 68, 56, 0.2)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '12px 14px',
+                                fontSize: 14,
+                                color: 'var(--error-700)',
+                            }}>
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleLogin}
+                            disabled={loading}
+                            style={{
+                                width: '100%',
+                                padding: '10px 18px',
+                                fontSize: 16,
+                                marginTop: 4,
+                            }}
+                        >
+                            {loading
+                                ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Signing in...</>
+                                : 'Sign in'
+                            }
+                        </button>
                     </div>
 
-                    {error && (
-                        <div style={{
-                            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                            borderRadius: 'var(--radius)', padding: '10px 14px',
-                            fontSize: 12, color: 'var(--red)', fontFamily: 'var(--font-mono)',
-                        }}>
-                            {error}
-                        </div>
-                    )}
-
-                    <button className="btn btn-primary" onClick={handleLogin} disabled={loading}
-                        style={{ width: '100%', justifyContent: 'center', marginTop: 4, opacity: loading ? 0.7 : 1 }}>
-                        {loading ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Signing in...</> : 'Sign In'}
-                    </button>
+                    <p style={{
+                        marginTop: 32,
+                        textAlign: 'center',
+                        fontSize: 14,
+                        color: 'var(--text-quaternary)',
+                    }}>
+                        Don't have an account?{' '}
+                        <span style={{ color: 'var(--brand-600)', fontWeight: 600, cursor: 'pointer' }}>
+                            Contact your admin
+                        </span>
+                    </p>
                 </div>
+            </div>
 
-                <div style={{ marginTop: 20, textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                    Create accounts via Supabase Auth dashboard
+            {/* Right — Branding panel (hidden on mobile) */}
+            <div style={{
+                width: '50%',
+                background: 'linear-gradient(135deg, var(--brand-50) 0%, #ede9fe 50%, var(--brand-100) 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 64,
+                borderLeft: '1px solid var(--border-primary)',
+            }}
+                className="login-branding"
+            >
+                <div style={{
+                    width: 80, height: 80,
+                    background: 'var(--brand-600)',
+                    borderRadius: 20,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 32,
+                    boxShadow: '0 8px 32px rgba(105, 65, 198, 0.25)',
+                }}>
+                    <Shield size={40} color="white" />
                 </div>
+                <h2 style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    textAlign: 'center',
+                    marginBottom: 12,
+                    letterSpacing: '-0.02em',
+                }}>
+                    NexusShield
+                </h2>
+                <p style={{
+                    fontSize: 16,
+                    color: 'var(--text-tertiary)',
+                    textAlign: 'center',
+                    maxWidth: 320,
+                    lineHeight: 1.6,
+                }}>
+                    IoT security monitoring and device management for modern teams.
+                </p>
             </div>
         </div>
     )

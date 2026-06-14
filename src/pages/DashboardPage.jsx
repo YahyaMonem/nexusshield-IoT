@@ -145,7 +145,7 @@ export default function DashboardPage() {
                 />
             </div>
 
-            <div className="grid-2">
+            <div className="grid-2" style={{ marginTop: 8 }}>
                 {/* Recent Events */}
                 <div className="card">
                     <div className="card-header">
@@ -178,7 +178,7 @@ export default function DashboardPage() {
                                                         {et.label}
                                                     </span>
                                                 </td>
-                                                <td style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                                                <td style={{ color: 'var(--text-tertiary)', fontSize: 14 }}>
                                                     {ev.devices?.name || 'Unknown'}
                                                 </td>
                                                 <td>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
                                                         {sv.label}
                                                     </span>
                                                 </td>
-                                                <td style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                                                <td style={{ color: 'var(--text-quaternary)', fontSize: 13 }}>
                                                     {formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}
                                                 </td>
                                             </tr>
@@ -219,10 +219,15 @@ export default function DashboardPage() {
 
 function StatCard({ label, value, sub, color, icon }) {
     return (
-        <div className="stat-card" style={{ '--accent-color': color }}>
+        <div className="stat-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div className="stat-label">{label}</div>
-                <div style={{ color, opacity: 0.7 }}>{icon}</div>
+                <div style={{
+                    width: 40, height: 40, borderRadius: 10,
+                    background: `${color}10`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: color,
+                }}>{icon}</div>
             </div>
             <div className="stat-value">{value}</div>
             <div className="stat-sub">{sub}</div>
@@ -270,7 +275,7 @@ function DeviceStatusRow({ device }) {
                 </div>
                 <div>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{device.name}</div>
-                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 14, color: 'var(--text-quaternary)' }}>
                         {device.location || 'No location set'}
                     </div>
                 </div>
@@ -281,7 +286,7 @@ function DeviceStatusRow({ device }) {
                     {s.label}
                 </span>
                 {lastSeen && (
-                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 3 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-quaternary)', marginTop: 3 }}>
                         {formatDistanceToNow(lastSeen, { addSuffix: true })}
                     </div>
                 )}

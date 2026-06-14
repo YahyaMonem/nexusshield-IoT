@@ -14,7 +14,7 @@ const TOAST_STYLES = {
   high:   { icon: XCircle,      accent: '#ef4444', bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.3)'   },
   medium: { icon: AlertTriangle, accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)'  },
   low:    { icon: CheckCircle,  accent: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)'  },
-  info:   { icon: Info,         accent: '#00e5ff', bg: 'rgba(0,229,255,0.10)',  border: 'rgba(0,229,255,0.25)'  },
+  info:   { icon: Info,         accent: 'var(--brand-600)', bg: 'var(--brand-50)',  border: 'var(--brand-200)'  },
 }
 
 let nextId = 0
@@ -74,13 +74,13 @@ function Toast({ toast, onDismiss }) {
         alignItems: 'flex-start',
         gap: 12,
         padding: '13px 16px',
-        background: '#0d1117',
+        background: '#ffffff',
         border: `1px solid ${style.border}`,
         borderLeft: `3px solid ${style.accent}`,
         borderRadius: 10,
         minWidth: 280,
         maxWidth: 360,
-        boxShadow: `0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.05)`,
+        boxShadow: 'var(--shadow-lg)',
         backdropFilter: 'blur(12px)',
         animation: toast.leaving ? 'toastOut 0.35s ease forwards' : 'toastIn 0.3s ease',
         position: 'relative',
@@ -106,7 +106,7 @@ function Toast({ toast, onDismiss }) {
           fontFamily: 'var(--font-display)',
           fontWeight: 700,
           fontSize: 13,
-          color: '#e8edf2',
+          color: 'var(--text-primary)',
           lineHeight: 1.3,
         }}>
           {toast.title}
@@ -115,7 +115,7 @@ function Toast({ toast, onDismiss }) {
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
-            color: '#7a8899',
+            color: 'var(--text-secondary)',
             marginTop: 3,
             lineHeight: 1.4,
             overflow: 'hidden',
@@ -149,7 +149,7 @@ function Toast({ toast, onDismiss }) {
           background: 'none',
           border: 'none',
           cursor: 'pointer',
-          color: '#3d4f62',
+          color: 'var(--text-quaternary)',
           padding: 2,
           flexShrink: 0,
           position: 'relative',
@@ -157,8 +157,8 @@ function Toast({ toast, onDismiss }) {
           lineHeight: 1,
           transition: 'color 0.15s',
         }}
-        onMouseEnter={e => e.currentTarget.style.color = '#e8edf2'}
-        onMouseLeave={e => e.currentTarget.style.color = '#3d4f62'}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-quaternary)'}
       >
         <X size={14} />
       </button>

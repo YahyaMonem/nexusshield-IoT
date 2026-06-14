@@ -1,24 +1,28 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import {
-  LayoutDashboard, Radio, BarChart3, Settings,
-  Shield, LogOut, User, Wifi, WifiOff, Tv2, History
+  LayoutDashboard, BarChart3, Settings,
+  Shield, LogOut, User, Tv2, History,
+  HardDrive, ShieldCheck, ChevronDown
 } from 'lucide-react'
 
 import LoginPage from './pages/LoginPage'
+import OnboardingPage from './pages/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
+import HistoryPage from './pages/HistoryPage'
 import LiveFeedPage from './pages/LiveFeedPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import SettingsPage from './pages/SettingsPage'
-import MonitorPage from './pages/MonitorPage'
+import DeviceManagementPage from './pages/DeviceManagementPage'
+import UserManagementPage from './pages/UserManagementPage'
+import NotificationBell from './components/NotificationBell'
 
-// ── Auth Context ──────────────────────────────────────────────────────────
 import { AuthContext, useAuth } from './authContext'
 import { ToastProvider } from './toastContext'
 
 function AuthProvider({ children }) {
-  const [session, setSession] = useState(undefined) // undefined = loading
+  const [session, setSession] = useState(undefined)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -28,9 +32,9 @@ function AuthProvider({ children }) {
 
   if (session === undefined) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12 }}>
-        <div className="spinner" />
-        <span className="mono text-muted" style={{ fontSize: 12 }}>INITIALIZING</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, flexDirection: 'column' }}>
+        <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+        <span style={{ fontSize: 14, color: 'var(--text-quaternary)' }}>Loading...</span>
       </div>
     )
   }
@@ -38,27 +42,62 @@ function AuthProvider({ children }) {
   return <AuthContext.Provider value={{ session }}>{children}</AuthContext.Provider>
 }
 
-// ── Protected Route ───────────────────────────────────────────────────────
 function Protected({ children }) {
   const { session } = useAuth()
   return session ? children : <Navigate to="/login" replace />
 }
 
-// ── Layout (Sidebar + Topbar) ─────────────────────────────────────────────
-const NAV = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/history', icon: History, label: 'History' },
-  { to: '/live', icon: Tv2, label: 'Live' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+/* ── Onboarding gate ── */
+function OnboardingGate({ children }) {
+  const { session } = useAuth()
+  const [checked, setChecked] = useState(false)
+  const [needsOnboarding, setNeedsOnboarding] = useState(false)
+
+  useEffect(() => {
+    if (!session) return
+    supabase.from('profiles').select('onboarding_complete').eq('id', session.user.id).maybeSingle()
+      .then(({ data }) => {
+        setNeedsOnboarding(!data?.onboarding_complete)
+        setChecked(true)
+      })
+  }, [session])
+
+  if (!checked) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, flexDirection: 'column' }}>
+        <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
+      </div>
+    )
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingPage />
+  }
+
+  return children
+}
+
+/* ── Navigation ── */
+const MAIN_NAV = [
+  { to: '/',          icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/history',   icon: History,         label: 'Event History' },
+  { to: '/live',      icon: Tv2,             label: 'Live Feed' },
+  { to: '/analytics', icon: BarChart3,       label: 'Analytics' },
+]
+
+const MANAGE_NAV = [
+  { to: '/devices',      icon: HardDrive,   label: 'Devices' },
+  { to: '/access',       icon: ShieldCheck,  label: 'Access Control' },
 ]
 
 const PAGE_TITLES = {
-  '/': 'Dashboard',
-  '/live': 'Live Feed',
-  '/monitor': 'Monitor',
+  '/':          'Dashboard',
+  '/history':   'Event History',
+  '/live':      'Live Feed',
   '/analytics': 'Analytics',
-  '/settings': 'Settings',
+  '/devices':   'Devices',
+  '/access':    'Access Control',
+  '/settings':  'Settings',
 }
 
 function Layout({ children }) {
@@ -74,13 +113,11 @@ function Layout({ children }) {
     supabase.from('profiles').select('full_name, role').eq('id', session.user.id).maybeSingle()
       .then(({ data }) => setProfile(data))
 
-    // Monitor realtime connection
     const channel = supabase.channel('health')
     channel.subscribe(status => setRealtimeOk(status === 'SUBSCRIBED'))
     return () => supabase.removeChannel(channel)
   }, [session])
 
-  // Close sidebar whenever route changes (mobile nav tap)
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
   const handleSignOut = async () => {
@@ -88,9 +125,10 @@ function Layout({ children }) {
     navigate('/login')
   }
 
+  const userInitial = (profile?.full_name || session?.user?.email || 'U')[0].toUpperCase()
+
   return (
     <div className="layout">
-      {/* ── Backdrop (mobile only) ── */}
       {sidebarOpen && (
         <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
       )}
@@ -99,47 +137,94 @@ function Layout({ children }) {
       <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
         <div className="sidebar-logo">
           <div className="brand">
-            <Shield size={13} style={{ display: 'inline', marginRight: 7 }} />
-            nexusshield
+            <Shield size={20} color="var(--brand-600)" />
+            NexusShield
           </div>
-          <div className="brand-sub">IoT Security Dashboard</div>
         </div>
 
         <nav className="sidebar-nav" onClick={() => setSidebarOpen(false)}>
-          <div className="nav-section-label">Navigation</div>
-          {NAV.map(({ to, icon: Icon, label }) => (
+          {MAIN_NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             >
-              <Icon size={15} className="icon" />
+              <Icon size={20} className="icon" />
+              {label}
+            </NavLink>
+          ))}
+
+          <div className="nav-section-label">Management</div>
+
+          {MANAGE_NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            >
+              <Icon size={20} className="icon" />
               {label}
             </NavLink>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 4 }}>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            style={{ marginBottom: 12 }}
+          >
+            <Settings size={20} className="icon" />
+            Settings
+          </NavLink>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 12px 4px',
+            borderTop: '1px solid var(--border-primary)',
+            marginTop: 4,
+            paddingTop: 16,
+          }}>
             <div style={{
-              width: 28, height: 28, borderRadius: '50%',
-              background: 'var(--accent-dim)', border: '1px solid var(--accent)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'var(--brand-50)',
+              border: '1px solid var(--border-primary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, fontWeight: 600, color: 'var(--brand-600)',
+              flexShrink: 0,
             }}>
-              <User size={13} color="var(--accent)" />
+              {userInitial}
             </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>{profile?.full_name || session?.user?.email?.split('@')[0]}</div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                {profile?.role || 'viewer'}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {profile?.full_name || session?.user?.email?.split('@')[0]}
+              </div>
+              <div style={{
+                fontSize: 14, color: 'var(--text-tertiary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {session?.user?.email}
               </div>
             </div>
+            <button
+              onClick={handleSignOut}
+              title="Sign out"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-quaternary)', padding: 4,
+                display: 'flex', alignItems: 'center',
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-quaternary)'}
+            >
+              <LogOut size={20} />
+            </button>
           </div>
-          <button className="nav-item" onClick={handleSignOut}>
-            <LogOut size={15} className="icon" />
-            Sign Out
-          </button>
         </div>
       </aside>
 
@@ -147,7 +232,6 @@ function Layout({ children }) {
       <div className="main-content">
         <header className="topbar">
           <div className="topbar-left">
-            {/* Hamburger — visible only on ≤ 1024px via CSS */}
             <button
               className="hamburger"
               onClick={() => setSidebarOpen(o => !o)}
@@ -160,11 +244,14 @@ function Layout({ children }) {
             <h1 className="page-title">{PAGE_TITLES[location.pathname] || 'Dashboard'}</h1>
           </div>
           <div className="topbar-right">
-            <div className="connection-badge">
-              {realtimeOk
-                ? <><div className="connection-dot" /><span className="connection-label">REALTIME CONNECTED</span></>
-                : <><div className="connection-dot offline" /><WifiOff size={12} /><span className="connection-label"> DISCONNECTED</span></>
-              }
+            <NotificationBell />
+            <div className="connection-badge" style={
+              realtimeOk
+                ? { background: 'var(--success-50)', color: 'var(--success-700)' }
+                : { background: 'var(--bg-tertiary)', color: 'var(--text-quaternary)' }
+            }>
+              <div className={`connection-dot${realtimeOk ? '' : ' offline'}`} />
+              <span className="connection-label">{realtimeOk ? 'Connected' : 'Disconnected'}</span>
             </div>
           </div>
         </header>
@@ -177,7 +264,6 @@ function Layout({ children }) {
   )
 }
 
-// ── App Root ──────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
@@ -187,15 +273,19 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/*" element={
               <Protected>
-                <Layout>
-                  <Routes>
-                    <Route path="/" element={<DashboardPage />} />
-                    <Route path="/history" element={<LiveFeedPage />} />
-                    <Route path="/live" element={<MonitorPage />} />
-                    <Route path="/analytics" element={<AnalyticsPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                  </Routes>
-                </Layout>
+                <OnboardingGate>
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/live" element={<LiveFeedPage />} />
+                      <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/devices" element={<DeviceManagementPage />} />
+                      <Route path="/access" element={<UserManagementPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                    </Routes>
+                  </Layout>
+                </OnboardingGate>
               </Protected>
             } />
           </Routes>

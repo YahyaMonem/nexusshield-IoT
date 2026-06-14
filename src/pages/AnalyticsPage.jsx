@@ -7,17 +7,18 @@ import {
 } from 'recharts'
 import { format, subDays, eachDayOfInterval } from 'date-fns'
 
-const CHART_COLORS = ['#00e5ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+const CHART_COLORS = ['#7f56d9', '#17b26a', '#f79009', '#f04438', '#2e90fa']
 const DAYS_OPTIONS = [7, 14, 30]
 
 const tooltipStyle = {
     contentStyle: {
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-accent)',
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
         borderRadius: 8,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
+        fontFamily: 'var(--font-display)',
+        fontSize: 13,
         color: 'var(--text-primary)',
+        boxShadow: 'var(--shadow-lg)',
     },
     itemStyle: { color: 'var(--text-secondary)' },
     labelStyle: { color: 'var(--text-primary)', fontWeight: 600 },
@@ -41,16 +42,29 @@ export default function AnalyticsPage() {
         setLoading(true)
         const from = subDays(new Date(), days).toISOString()
 
-        const [eventsRes, devicesRes] = await Promise.all([
+        const [eventsRes, trackingRes, devicesRes] = await Promise.all([
             supabase.from('events').select('event_type, severity, created_at, device_id').gte('created_at', from),
+            supabase.from('tracking_events').select('object_class, created_at, device_id').gte('created_at', from),
             supabase.from('devices').select('id, name'),
         ])
 
         const events = eventsRes.data || []
+        const aiEvents = trackingRes.data || []
         const devices = devicesRes.data || []
 
         // Enrich motion events with computed severity
-        const enriched = enrichWithSeverity(events)
+        const enrichedSensorEvents = enrichWithSeverity(events)
+        
+        // Map AI events to standard format
+        const mappedAiEvents = aiEvents.map(te => ({
+            event_type: te.object_class,
+            _severity: te.object_class === 'person' ? 'high' : 'medium',
+            created_at: te.created_at,
+            device_id: te.device_id
+        }))
+
+        // Combine both data streams
+        const enriched = [...enrichedSensorEvents, ...mappedAiEvents]
 
         // ── 1. Events over time (line chart) ──────────────────────────────────
         const dayRange = eachDayOfInterval({ start: subDays(new Date(), days - 1), end: new Date() })
@@ -128,11 +142,11 @@ export default function AnalyticsPage() {
                         onClick={() => setDays(d)}
                         className="btn"
                         style={{
-                            padding: '5px 14px', fontSize: 11,
-                            background: days === d ? 'var(--accent-dim)' : 'transparent',
-                            border: `1px solid ${days === d ? 'rgba(0,229,255,0.3)' : 'var(--border-accent)'}`,
-                            color: days === d ? 'var(--accent)' : 'var(--text-secondary)',
-                            fontFamily: 'var(--font-mono)',
+                            padding: '5px 14px', fontSize: 13,
+                            background: days === d ? 'var(--brand-50)' : 'transparent',
+                            border: `1px solid ${days === d ? 'var(--brand-600)' : 'var(--border-secondary)'}`,
+                            color: days === d ? 'var(--brand-600)' : 'var(--text-tertiary)',
+                            fontWeight: days === d ? 600 : 500,
                         }}
                     >
                         {d}D
@@ -237,7 +251,7 @@ export default function AnalyticsPage() {
                                             borderRadius: 3,
                                             background: count === 0
                                                 ? 'var(--bg-hover)'
-                                                : `rgba(0,229,255,${0.1 + intensity * 0.9})`,
+                                                 : `rgba(127, 86, 217, ${0.08 + intensity * 0.82})`,
                                             border: '1px solid var(--border)',
                                             cursor: 'default',
                                         }}
