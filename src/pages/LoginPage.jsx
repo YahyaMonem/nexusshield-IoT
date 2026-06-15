@@ -1,42 +1,112 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../supabaseClient'
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabaseClient'
+import { ensureUserProfile } from '../authProfile'
 import { Eye, EyeOff, Shield } from 'lucide-react'
+import { useAuth } from '../authContext'
+
+const AUTH_TIMEOUT_MS = 10000
+
+function promiseWithTimeout(promise, message) {
+    let timeoutId
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), AUTH_TIMEOUT_MS)
+    })
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
+}
+
+// authFetch removed in favor of standard supabase.auth methods
 
 export default function LoginPage() {
     const navigate = useNavigate()
+    const { session } = useAuth()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [showPw, setShowPw] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [message, setMessage] = useState(null)
     const [isSignUp, setIsSignUp] = useState(false)
 
+    const isMounted = useRef(true)
+    useEffect(() => {
+        return () => { isMounted.current = false }
+    }, [])
+
+    useEffect(() => {
+        if (session) {
+            navigate('/', { replace: true })
+        }
+    }, [session, navigate])
+
+    const goToDashboard = async (user) => {
+        try {
+            await promiseWithTimeout(ensureUserProfile(user), 'Profile check timed out')
+            await promiseWithTimeout(
+                supabase.from('profiles').update({ onboarding_complete: true }).eq('id', user.id),
+                'Profile update timed out'
+            )
+        } catch (err) {
+            console.error('Profile bootstrap failed:', err)
+        }
+
+        if (!isMounted.current) return
+        setError(null)
+        setMessage('Login successful. Opening dashboard...')
+        setLoading(false)
+        // Navigation handled by the session useEffect
+    }
+
     const handleAuth = async () => {
-        if (!email || !password) { setError('Please fill in all fields'); return }
+        if (loading) return
+        const normalizedEmail = email.trim().toLowerCase()
+        if (!normalizedEmail || !password) { setError('Please fill in all fields'); return }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+            setError('Enter a valid email address')
+            return
+        }
+        if (isSignUp && password.length < 6) {
+            setError('Password must be at least 6 characters')
+            return
+        }
         setLoading(true)
         setError(null)
+        setMessage(null)
 
-        if (isSignUp) {
-            const { error: err } = await supabase.auth.signUp({ email, password })
-            if (err) {
-                setError(err.message)
+        try {
+            if (isSignUp) {
+                const { data, error: signUpError } = await promiseWithTimeout(
+                    supabase.auth.signUp({ email: normalizedEmail, password }),
+                    'Sign up timed out. Check your connection and try again.'
+                )
+                if (!isMounted.current) return
+                if (signUpError) throw signUpError
+
+                if (data?.session) {
+                    await goToDashboard(data.user)
+                    return
+                }
+
+                setMessage('Check your email to confirm your account, then log in.')
+                setIsSignUp(false)
+                setPassword('')
                 setLoading(false)
             } else {
-                // If email confirmation is required, you might need to show a message here.
-                // Assuming auto-login or simple redirect for now.
-                setLoading(false)
-                navigate('/')
+                const { data, error: signInError } = await promiseWithTimeout(
+                    supabase.auth.signInWithPassword({ email: normalizedEmail, password }),
+                    'Sign in timed out. Check your connection and try again.'
+                )
+                if (!isMounted.current) return
+                if (signInError) throw signInError
+
+                await goToDashboard(data.user)
             }
-        } else {
-            const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-            if (err) {
-                setError(err.message)
-                setLoading(false)
-            } else {
-                setLoading(false)
-                navigate('/')
-            }
+        } catch (err) {
+            if (!isMounted.current) return
+            setMessage(null)
+            setError(err.message || 'Login failed. Please check your email and password.')
+            setLoading(false)
         }
     }
 
@@ -66,10 +136,7 @@ export default function LoginPage() {
                             }}
                             onClick={() => navigate('/')}
                         >
-                            <span className="brand-mark" aria-hidden="true">
-                                <Shield size={22} strokeWidth={2.4} />
-                            </span>
-                            <span className="brand-name" style={{ fontSize: 22, fontWeight: 800 }}>BSAFE</span>
+                            <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '48px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} />
                         </div>
                         <h1 style={{
                             fontSize: 24,
@@ -92,8 +159,9 @@ export default function LoginPage() {
                     {/* Form */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                         <div>
-                            <label className="label">Email</label>
+                            <label className="label" htmlFor="email">Email</label>
                             <input
+                                id="email"
                                 className="input"
                                 type="email"
                                 placeholder="Enter your email"
@@ -104,9 +172,10 @@ export default function LoginPage() {
                         </div>
 
                         <div>
-                            <label className="label">Password</label>
+                            <label className="label" htmlFor="password">Password</label>
                             <div style={{ position: 'relative' }}>
                                 <input
+                                    id="password"
                                     className="input"
                                     type={showPw ? 'text' : 'password'}
                                     placeholder={isSignUp ? "Create a password" : "Enter your password"}
@@ -118,6 +187,7 @@ export default function LoginPage() {
                                 <button
                                     onClick={() => setShowPw(p => !p)}
                                     type="button"
+                                    aria-label="Toggle password visibility"
                                     style={{
                                         position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
                                         background: 'none', border: 'none', cursor: 'pointer',
@@ -139,6 +209,19 @@ export default function LoginPage() {
                                 color: 'var(--error-700)',
                             }}>
                                 {error}
+                            </div>
+                        )}
+
+                        {message && (
+                            <div style={{
+                                background: 'var(--success-50)',
+                                border: '1px solid rgba(18, 183, 106, 0.2)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '12px 14px',
+                                fontSize: 14,
+                                color: 'var(--success-700)',
+                            }}>
+                                {message}
                             </div>
                         )}
 
@@ -168,7 +251,7 @@ export default function LoginPage() {
                     }}>
                         {isSignUp ? "Already have an account?" : "Don't have an account?"}{' '}
                         <button 
-                            onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
+                            onClick={() => { setIsSignUp(!isSignUp); setError(null); setMessage(null); }}
                             style={{ 
                                 color: 'var(--brand-600)', 
                                 fontWeight: 600, 
@@ -210,17 +293,16 @@ export default function LoginPage() {
                     border: '1px solid rgba(255,255,255,0.15)',
                     boxShadow: 'var(--shadow-md)',
                 }}>
-                    <Shield size={38} strokeWidth={2.2} />
+                    <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', borderRadius: '12px' }} />
                 </div>
                 <h2 style={{
                     fontSize: 28,
                     fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    textAlign: 'center',
+                    color: '#ffffff',
                     marginBottom: 12,
                     letterSpacing: '-0.02em',
                 }}>
-                    BSAFE
+                    NexusShield
                 </h2>
                 <p style={{
                     fontSize: 16,

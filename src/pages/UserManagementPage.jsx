@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../authContext'
 import { useToast } from '../toastContext'
@@ -20,6 +20,11 @@ export default function UserManagementPage() {
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviteRole, setInviteRole] = useState('viewer')
 
+    const isMounted = useRef(true)
+    useEffect(() => {
+        return () => { isMounted.current = false }
+    }, [])
+
     useEffect(() => {
         fetchData()
     }, [])
@@ -30,6 +35,7 @@ export default function UserManagementPage() {
             supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
             supabase.from('profiles').select('*').order('created_at', { ascending: true }),
         ])
+        if (!isMounted.current) return
         setProfile(profRes.data)
         setUsers(usersRes.data || [])
         setLoading(false)
@@ -42,6 +48,7 @@ export default function UserManagementPage() {
             .update({ role: newRole })
             .eq('id', userId)
 
+        if (!isMounted.current) return
         if (error) {
             addToast({ type: 'high', title: 'Update Failed', message: error.message })
         } else {
@@ -212,6 +219,7 @@ export default function UserManagementPage() {
                                                                     value={user.role || 'viewer'}
                                                                     onChange={e => handleRoleChange(user.id, e.target.value)}
                                                                     disabled={updatingId === user.id}
+                                                                    aria-label="Change user role"
                                                                     style={{
                                                                         background: 'var(--bg-surface)',
                                                                         border: '1px solid var(--border-accent)',

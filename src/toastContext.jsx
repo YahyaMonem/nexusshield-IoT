@@ -32,11 +32,11 @@ export function ToastProvider({ children }) {
   }, [])
 
   const dismiss = useCallback((id) => {
+    if (timers.current[id]) { clearTimeout(timers.current[id]); delete timers.current[id]; }
     // mark as leaving so the exit animation plays
     setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t))
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
-      delete timers.current[id]
     }, 350) // matches CSS transition duration
   }, [])
 
@@ -52,7 +52,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={{ addToast }}>
       {children}
       {/* Toast stack — bottom right */}
-      <div style={{
+      <div className="toast-container" aria-live="polite" style={{
         position: 'fixed',
         bottom: 24,
         right: 24,
@@ -153,6 +153,7 @@ function Toast({ toast, onDismiss }) {
       {/* Dismiss */}
       <button
         onClick={() => onDismiss(toast.id)}
+        aria-label="Close toast"
         style={{
           background: 'none',
           border: 'none',

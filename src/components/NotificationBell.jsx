@@ -10,8 +10,6 @@ export default function NotificationBell() {
     const dropdownRef = useRef(null)
     const openRef = useRef(open)
 
-    useEffect(() => { openRef.current = open }, [open])
-
     // Load last viewed time from local storage
     const getLastViewed = () => {
         const stored = localStorage.getItem('nexus_last_notifications_view')
@@ -36,19 +34,23 @@ export default function NotificationBell() {
 
     useEffect(() => {
         async function fetchInitialEvents() {
-            // Fetch tracking events
-            const { data } = await supabase
-                .from('tracking_events')
-                .select('id, object_class, duration_seconds, created_at, first_seen_at')
-                .order('created_at', { ascending: false })
-                .limit(20)
+            try {
+                // Fetch tracking events
+                const { data } = await supabase
+                    .from('tracking_events')
+                    .select('id, object_class, duration_seconds, created_at, first_seen_at')
+                    .order('created_at', { ascending: false })
+                    .limit(20)
 
-            const evs = data || []
-            setEvents(evs)
+                const evs = data || []
+                setEvents(evs)
 
-            const lastViewed = getLastViewed()
-            const unread = evs.filter(e => new Date(e.created_at) > lastViewed).length
-            setUnreadCount(unread)
+                const lastViewed = getLastViewed()
+                const unread = evs.filter(e => new Date(e.created_at) > lastViewed).length
+                setUnreadCount(unread)
+            } catch (err) {
+                console.error("Failed to fetch initial events:", err)
+            }
         }
         fetchInitialEvents()
 
@@ -75,7 +77,7 @@ export default function NotificationBell() {
         if (!open) {
             markAsRead()
         }
-        setOpen(!open)
+        setOpen(prev => { const next = !prev; openRef.current = next; return next; })
     }
 
     return (
@@ -133,6 +135,9 @@ export default function NotificationBell() {
                                     transition: 'background 0.15s',
                                 }}
                                 className="notification-item"
+                                role="menuitem"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if(e.key==='Enter'||e.key===' ') markAsRead(ev.id) }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>

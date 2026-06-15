@@ -8,6 +8,20 @@ import { sendSecurityAlertEmail } from '../alertEmail'
 import * as tf from '@tensorflow/tfjs'
 import * as cocoSsd from '@tensorflow-models/coco-ssd'
 
+function ClockOverlay() {
+    const [time, setTime] = useState(new Date());
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+    return (
+        <div className="video-overlay">
+            <div className="overlay-badge">REC</div>
+            <div className="overlay-time">{time.toLocaleString()}</div>
+        </div>
+    );
+}
+
 export default function LiveFeedPage() {
     const [devices, setDevices] = useState([])
     const [configs, setConfigs] = useState({}) // keyed by device_id
@@ -33,7 +47,6 @@ export default function LiveFeedPage() {
     const [configDirty, setConfigDirty] = useState(false)
     
     // ── AI overlay states ────────────────────────────────────────────────
-    const [currentTime, setCurrentTime] = useState(new Date())
     const [aiModel, setAiModel] = useState(null)
     const [aiLoading, setAiLoading] = useState(true)
     const [aiTerminalLog, setAiTerminalLog] = useState([])
@@ -51,6 +64,13 @@ export default function LiveFeedPage() {
     // ── Device Status & Stream State ─────────────────────────────────────────
     const selectedDevice = devices.find(d => d.id === selectedId) || null
     const selectedConfig = selectedId ? configs[selectedId] : null
+
+    const configRef = useRef(selectedConfig);
+    const selectedIdRef = useRef(selectedId);
+    useEffect(() => {
+        configRef.current = selectedConfig;
+        selectedIdRef.current = selectedId;
+    }, [selectedConfig, selectedId]);
 
     const STALE_MS = 2 * 60 * 1000
     const lastSeen = selectedDevice?.last_seen_at ? new Date(selectedDevice.last_seen_at) : null
@@ -87,6 +107,7 @@ export default function LiveFeedPage() {
 
     async function refreshSelectedDevice() {
         if (!selectedId || retryingStream) return
+        const initialId = selectedId;
 
         setRetryingStream(true)
         setStreamError(false)
@@ -97,6 +118,8 @@ export default function LiveFeedPage() {
             .select('id, name, location, status, last_seen_at, stream_url')
             .eq('id', selectedId)
             .maybeSingle()
+
+        if (initialId !== selectedIdRef.current) return;
 
         if (deviceError) {
             addToast({
@@ -154,14 +177,10 @@ export default function LiveFeedPage() {
     }
 
     useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-        
         // Request desktop notification permission on mount
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission()
         }
-        
-        return () => clearInterval(timer)
     }, [])
 
     // ── Load AI Model on Mount ──────────────────────────────────────────────
@@ -263,7 +282,7 @@ export default function LiveFeedPage() {
                             setAiTerminalLog(prev => [{ id: Date.now() + Math.random(), text: `[${format(now, 'HH:mm:ss')}] > New ${pred.class.toUpperCase()} detected (ID: ${tId})` }, ...prev].slice(0, 20))
                             
                             // Native Desktop Notification
-                            if (selectedConfig?.alert_enabled !== false && 'Notification' in window && Notification.permission === 'granted') {
+                            if (configRef.current?.alert_enabled !== false && 'Notification' in window && Notification.permission === 'granted') {
                                 new Notification(`NexusShield Alert`, {
                                     body: `${pred.class.toUpperCase()} detected on ${selectedDevice?.name || 'Camera'}!`,
                                     icon: '/vite.svg'
@@ -271,8 +290,8 @@ export default function LiveFeedPage() {
                             }
                             
                             // EmailJS Notification (with cooldown)
-                            const cooldownMs = (selectedConfig?.detection_cooldown || 30) * 1000
-                            if (selectedConfig?.alert_enabled !== false && now.getTime() - lastEmailSentRef.current > cooldownMs) {
+                            const cooldownMs = (configRef.current?.detection_cooldown || 30) * 1000
+                            if (configRef.current?.alert_enabled !== false && now.getTime() - lastEmailSentRef.current > cooldownMs) {
                                 lastEmailSentRef.current = now.getTime()
 
                                 sendSecurityAlertEmail({
@@ -538,6 +557,8 @@ export default function LiveFeedPage() {
                         return (
                             <button
                                 key={dev.id}
+                                aria-label={`Select ${dev.name}`}
+                                aria-pressed={active}
                                 onClick={() => setSelectedId(dev.id)}
                                 style={{
                                     display: 'flex',
@@ -626,20 +647,7 @@ export default function LiveFeedPage() {
                                 <div style={{ position: 'absolute', bottom: 20, left: 20, width: 20, height: 20, borderBottom: '2px solid rgba(0,255,0,0.4)', borderLeft: '2px solid rgba(0,255,0,0.4)', pointerEvents: 'none' }} />
                                 <div style={{ position: 'absolute', bottom: 20, right: 20, width: 20, height: 20, borderBottom: '2px solid rgba(0,255,0,0.4)', borderRight: '2px solid rgba(0,255,0,0.4)', pointerEvents: 'none' }} />
                                 
-                                {/* Bottom Right Timestamp */}
-                                <div style={{
-                                    position: 'absolute',
-                                    bottom: 12,
-                                    right: 16,
-                                    fontFamily: 'var(--font-mono)',
-                                    fontSize: 14,
-                                    fontWeight: 700,
-                                    color: 'rgba(255, 255, 255, 0.9)',
-                                    textShadow: '0px 0px 4px rgba(0,0,0,0.8)',
-                                    pointerEvents: 'none',
-                                }}>
-                                    {format(currentTime, 'yyyy-MM-dd HH:mm:ss')}
-                                </div>
+                                <ClockOverlay />
 
                                 {/* Placeholder for AI Bounding Boxes */}
                                 {/* Removed old placeholder since we have the native canvas now */}

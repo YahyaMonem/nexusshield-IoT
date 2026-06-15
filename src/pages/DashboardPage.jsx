@@ -29,17 +29,42 @@ export default function DashboardPage() {
     const { addToast } = useToast()
 
     useEffect(() => {
+        let isMounted = true;
+
+        async function fetchAll() {
+            const today = new Date(); today.setHours(0, 0, 0, 0)
+
+            const [eventsRes, devicesRes, recentRes, highRes] = await Promise.all([
+                supabase.from('events').select('id', { count: 'exact' })
+                    .gte('created_at', today.toISOString()),
+                supabase.from('devices').select('*'),
+                supabase.from('events').select('*, devices(name), snapshots(image_url)')
+                    .order('created_at', { ascending: false }).limit(8),
+                supabase.from('events').select('id', { count: 'exact' })
+                    .eq('severity', 'high').gte('created_at', today.toISOString()),
+            ])
+
+            if (isMounted) {
+                const activeCount = countOnlineDevices(devicesRes.data || [])
+                const lastEventTime = recentRes.data?.[0]?.created_at
+
+                setStats({
+                    todayEvents: eventsRes.count || 0,
+                    activeDevices: activeCount,
+                    highSeverity: highRes.count || 0,
+                    lastEvent: lastEventTime,
+                })
+                setDevices(devicesRes.data || [])
+                setRecent(recentRes.data || [])
+                setLoading(false)
+            }
+        }
+
         fetchAll()
 
         // Refresh device status every 60 seconds (lightweight)
         const interval = setInterval(() => {
-            supabase.from('devices').select('*').then(({ data }) => {
-                if (data) {
-                    const activeCount = countOnlineDevices(data)
-                    setDevices(data)
-                    setStats(prev => ({ ...prev, activeDevices: activeCount }))
-                }
-            })
+            fetchAll()
         }, 60000)
 
         // ── Realtime: listen for new events ───────────────────────────────
@@ -90,37 +115,11 @@ export default function DashboardPage() {
             })
 
         return () => {
+            isMounted = false;
             clearInterval(interval)
             supabase.removeChannel(channel)
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-    async function fetchAll() {
-        const today = new Date(); today.setHours(0, 0, 0, 0)
-
-        const [eventsRes, devicesRes, recentRes, highRes] = await Promise.all([
-            supabase.from('events').select('id', { count: 'exact' })
-                .gte('created_at', today.toISOString()),
-            supabase.from('devices').select('*'),
-            supabase.from('events').select('*, devices(name), snapshots(image_url)')
-                .order('created_at', { ascending: false }).limit(8),
-            supabase.from('events').select('id', { count: 'exact' })
-                .eq('severity', 'high').gte('created_at', today.toISOString()),
-        ])
-
-        const activeCount = countOnlineDevices(devicesRes.data || [])
-        const lastEventTime = recentRes.data?.[0]?.created_at
-
-        setStats({
-            todayEvents: eventsRes.count || 0,
-            activeDevices: activeCount,
-            highSeverity: highRes.count || 0,
-            lastEvent: lastEventTime,
-        })
-        setDevices(devicesRes.data || [])
-        setRecent(recentRes.data || [])
-        setLoading(false)
-    }
 
     if (loading) return (
         <div className="empty-state"><div className="spinner" /></div>
@@ -135,28 +134,28 @@ export default function DashboardPage() {
                     value={stats.todayEvents}
                     sub="motion detections"
                     color="var(--accent)"
-                    icon={<Activity size={16} />}
+                    icon={<Activity size={16} aria-hidden="true" />}
                 />
                 <StatCard
                     label="Active Cameras"
                     value={`${stats.activeDevices}/${devices.length}`}
                     sub="devices online"
                     color="var(--green)"
-                    icon={<Camera size={16} />}
+                    icon={<Camera size={16} aria-hidden="true" />}
                 />
                 <StatCard
                     label="High Severity"
                     value={stats.highSeverity}
                     sub="today"
                     color="var(--red)"
-                    icon={<AlertTriangle size={16} />}
+                    icon={<AlertTriangle size={16} aria-hidden="true" />}
                 />
                 <StatCard
                     label="Last Activity"
                     value={stats.lastEvent ? formatDistanceToNow(new Date(stats.lastEvent), { addSuffix: false }) : '—'}
                     sub="ago"
                     color="var(--purple)"
-                    icon={<Clock size={16} />}
+                    icon={<Clock size={16} aria-hidden="true" />}
                 />
             </div>
 
@@ -205,7 +204,7 @@ export default function DashboardPage() {
                                                     style={{ color: 'var(--text-quaternary)', fontSize: 13 }}
                                                     title={formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}
                                                 >
-                                                    {format(new Date(ev.created_at), 'MMM d, HH:mm')}
+                                                    {format(new Date(ev.created_at), 'E d MMM h:mm a')}
                                                 </td>
                                             </tr>
                                         )

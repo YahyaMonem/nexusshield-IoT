@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabaseClient'
 import { enrichWithSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
 import {
@@ -49,92 +49,108 @@ export default function AnalyticsPage() {
     const [days, setDays] = useState(7)
     const [loading, setLoading] = useState(true)
 
-    const [lineData, setLineData] = useState([])
-    const [donutData, setDonutData] = useState([])
-    const [peakData, setPeakData] = useState([])
-    const [heatmapData, setHeatmap] = useState([])
-    const [uptimeData, setUptime] = useState([])
-    const [severityData, setSeverityData] = useState({ high: 0, medium: 0, low: 0, total: 0 })
-    const [severityLineData, setSeverityLineData] = useState([])
+    const [events, setEvents] = useState([])
+    const [devices, setDevices] = useState([])
 
-    useEffect(() => { fetchAll() }, [days])
+    useEffect(() => {
+        let isMounted = true
 
-    async function fetchAll() {
-        setLoading(true)
-        const from = subDays(new Date(), days).toISOString()
+        async function fetchAll() {
+            setLoading(true)
+            const from = subDays(new Date(), days).toISOString()
 
-        const [eventsRes, trackingRes, devicesRes] = await Promise.all([
-            supabase.from('events').select('event_type, severity, created_at, device_id').gte('created_at', from),
-            supabase.from('tracking_events').select('object_class, created_at, device_id').gte('created_at', from),
-            supabase.from('devices').select('id, name'),
-        ])
+            const [eventsRes, trackingRes, devicesRes] = await Promise.all([
+                supabase.from('events').select('event_type, severity, created_at, device_id').gte('created_at', from),
+                supabase.from('tracking_events').select('object_class, created_at, device_id').gte('created_at', from),
+                supabase.from('devices').select('id, name'),
+            ])
 
-        const events = eventsRes.data || []
-        const aiEvents = trackingRes.data || []
-        const devices = devicesRes.data || []
+            const fetchedEvents = eventsRes.data || []
+            const aiEvents = trackingRes.data || []
+            const fetchedDevices = devicesRes.data || []
 
-        // Enrich motion events with computed severity
-        const enrichedSensorEvents = enrichWithSeverity(events)
-        
-        // Map AI events to standard format
-        const mappedAiEvents = aiEvents.map(te => ({
-            event_type: te.object_class,
-            _severity: te.object_class === 'person' ? 'high' : 'medium',
-            created_at: te.created_at,
-            device_id: te.device_id
-        }))
+            // Enrich motion events with computed severity
+            const enrichedSensorEvents = enrichWithSeverity(fetchedEvents)
+            
+            // Map AI events to standard format
+            const mappedAiEvents = aiEvents.map(te => ({
+                event_type: te.object_class,
+                _severity: te.object_class === 'person' ? 'high' : 'medium',
+                created_at: te.created_at,
+                device_id: te.device_id
+            }))
 
-        // Combine both data streams
-        const enriched = [...enrichedSensorEvents, ...mappedAiEvents]
+            // Combine both data streams
+            const enriched = [...enrichedSensorEvents, ...mappedAiEvents]
+
+            if (!isMounted) return
+            setEvents(enriched)
+            setDevices(fetchedDevices)
+            setLoading(false)
+        }
+        fetchAll()
+
+        return () => { isMounted = false }
+    }, [days])
+
+    const {
+        lineData,
+        donutData,
+        peakData,
+        heatmapData,
+        uptimeData,
+        severityData,
+        severityLineData
+    } = useMemo(() => {
+        const dayRange = eachDayOfInterval({ start: subDays(new Date(), days - 1), end: new Date() })
 
         // ── 1. Events over time (line chart) ──────────────────────────────────
-        const dayRange = eachDayOfInterval({ start: subDays(new Date(), days - 1), end: new Date() })
         const byDay = {}
         dayRange.forEach(d => { byDay[format(d, 'MMM d')] = 0 })
-        enriched.forEach(ev => {
+        events.forEach(ev => {
             const key = format(new Date(ev.created_at), 'MMM d')
             if (byDay[key] !== undefined) byDay[key]++
         })
-        setLineData(Object.entries(byDay).map(([date, count]) => ({ date, count })))
+        const lineData = Object.entries(byDay).map(([date, count]) => ({ date, count }))
 
         // ── 2. Event type breakdown (donut) ────────────────────────────────────
         const typeCounts = {}
-        enriched.forEach(ev => { typeCounts[ev.event_type] = (typeCounts[ev.event_type] || 0) + 1 })
-        setDonutData(Object.entries(typeCounts).map(([name, value]) => ({
+        events.forEach(ev => { typeCounts[ev.event_type] = (typeCounts[ev.event_type] || 0) + 1 })
+        const donutData = Object.entries(typeCounts).map(([name, value]) => ({
             name: formatEventName(name),
             value,
-        })))
+        }))
 
         // ── 3. Peak hours (bar chart, 0-23) ───────────────────────────────────
         const hourCounts = Array(24).fill(0)
-        enriched.forEach(ev => { hourCounts[new Date(ev.created_at).getHours()]++ })
-        setPeakData(hourCounts.map((count, hour) => ({
+        events.forEach(ev => { hourCounts[new Date(ev.created_at).getHours()]++ })
+        const peakData = hourCounts.map((count, hour) => ({
             hour: `${String(hour).padStart(2, '0')}:00`,
             count,
-        })))
+        }))
 
         // ── 4. Heatmap: day-of-week × hour ────────────────────────────────────
         const DAYS_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         const grid = Array(7).fill(null).map(() => Array(24).fill(0))
-        enriched.forEach(ev => {
+        events.forEach(ev => {
             const d = new Date(ev.created_at)
             grid[d.getDay()][d.getHours()]++
         })
-        setHeatmap(grid.map((hours, di) => ({ day: DAYS_LABELS[di], hours })))
+        const heatmapData = grid.map((hours, di) => ({ day: DAYS_LABELS[di], hours }))
 
         // ── 5. Device uptime (from events / heartbeats count) ─────────────────
         const devEventCounts = {}
         devices.forEach(d => { devEventCounts[d.id] = { name: d.name, events: 0 } })
-        enriched.forEach(ev => {
+        events.forEach(ev => {
             if (devEventCounts[ev.device_id]) devEventCounts[ev.device_id].events++
         })
-        setUptime(Object.values(devEventCounts).map(d => ({ name: d.name, events: d.events })))
+        const uptimeData = Object.values(devEventCounts).map(d => ({ name: d.name, events: d.events }))
 
         // ── 6. Security event severity breakdown (all classifiable events) ────────
-        const securityEvents = enriched.filter(ev => ev._severity !== null)
+        const securityEvents = events.filter(ev => ev._severity !== null)
         const sevCounts = { high: 0, medium: 0, low: 0 }
         securityEvents.forEach(ev => { sevCounts[ev._severity]++ })
-        setSeverityData({ ...sevCounts, total: securityEvents.length })
+        const severityData = { ...sevCounts, total: securityEvents.length }
 
         // Per-day severity stacked line
         const byDaySev = {}
@@ -143,10 +159,18 @@ export default function AnalyticsPage() {
             const key = format(new Date(ev.created_at), 'MMM d')
             if (byDaySev[key]) byDaySev[key][ev._severity]++
         })
-        setSeverityLineData(Object.values(byDaySev))
+        const severityLineData = Object.values(byDaySev)
 
-        setLoading(false)
-    }
+        return {
+            lineData,
+            donutData,
+            peakData,
+            heatmapData,
+            uptimeData,
+            severityData,
+            severityLineData
+        }
+    }, [events, devices, days])
 
     if (loading) return <div className="empty-state"><div className="spinner" /></div>
 

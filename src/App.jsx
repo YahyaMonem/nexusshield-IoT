@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './supabaseClient'
+import { ensureUserProfile } from './authProfile'
 import {
   LayoutDashboard, BarChart3, Settings,
   Shield, LogOut, Tv2, History,
@@ -88,9 +89,33 @@ function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s))
-    return () => subscription.unsubscribe()
+    let mounted = true;
+    const bootstrapProfile = (user) => {
+      setTimeout(() => {
+        ensureUserProfile(user).catch(err => console.error('Profile bootstrap failed:', err))
+      }, 0)
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session?.user) {
+        if (mounted) setSession(null)
+        return
+      }
+      if (mounted) setSession(data.session)
+      bootstrapProfile(data.session.user)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+      if (!s?.user) {
+        if (mounted) setSession(null)
+        return
+      }
+      if (mounted) setSession(s)
+      bootstrapProfile(s.user)
+    })
+    return () => {
+      mounted = false;
+      subscription.unsubscribe()
+    }
   }, [])
 
   if (session === undefined) {
@@ -247,6 +272,11 @@ function Layout({ children }) {
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const emailedEventIdsRef = useRef(new Set())
+  const emailNotifsRef = useRef(false)
+
+  useEffect(() => {
+    emailNotifsRef.current = profile?.email_notifications
+  }, [profile])
 
   useEffect(() => {
     if (!session) return
@@ -268,41 +298,49 @@ function Layout({ children }) {
         schema: 'public',
         table: 'events',
       }, async (payload) => {
-        if (profile?.email_notifications === false) return
+        if (emailNotifsRef.current === false) return
         if (emailedEventIdsRef.current.has(payload.new.id)) return
 
-        const { data: event } = await supabase
-          .from('events')
-          .select('id, event_type, severity, created_at, devices(name)')
-          .eq('id', payload.new.id)
-          .single()
+        try {
+          const { data: event } = await supabase
+            .from('events')
+            .select('id, event_type, severity, created_at, devices(name)')
+            .eq('id', payload.new.id)
+            .single()
 
-        if (!event || !EMAIL_ALERT_EVENTS.has(event.event_type)) return
+          if (!event || !EMAIL_ALERT_EVENTS.has(event.event_type)) return
 
-        emailedEventIdsRef.current.add(event.id)
-        if (emailedEventIdsRef.current.size > 1000) emailedEventIdsRef.current.clear()
-        const emailPayload = buildSecurityEmailPayload(event)
+          emailedEventIdsRef.current.add(event.id)
+          if (emailedEventIdsRef.current.size > 1000) emailedEventIdsRef.current.clear()
+          const emailPayload = buildSecurityEmailPayload(event)
 
-        sendSecurityAlertEmail({
-          ...emailPayload,
-          eventType: event.event_type,
-          deviceName: event.devices?.name || 'Unknown device',
-          severity: event.severity,
-          time: new Date(event.created_at).toLocaleString(),
-        }).then(
-          () => console.log('SUCCESS: Security alert email sent'),
-          (error) => console.log('FAILED to send security alert email', error)
-        )
+          sendSecurityAlertEmail({
+            ...emailPayload,
+            eventType: event.event_type,
+            deviceName: event.devices?.name || 'Unknown device',
+            severity: event.severity,
+            time: new Date(event.created_at).toLocaleString(),
+          }).then(
+            () => console.log('SUCCESS: Security alert email sent'),
+            (error) => console.log('FAILED to send security alert email', error)
+          )
+        } catch (error) {
+          console.error("Error processing global alert email:", error)
+        }
       })
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [session, profile?.email_notifications])
+  }, [session])
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error(err)
+    }
     navigate('/login')
   }
 
@@ -311,22 +349,31 @@ function Layout({ children }) {
   return (
     <div className="layout">
       {sidebarOpen && (
-        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+        <div 
+          className="sidebar-backdrop" 
+          role="button"
+          tabIndex={0}
+          onClick={() => setSidebarOpen(false)} 
+          onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') { setSidebarOpen(false) } }}
+        />
       )}
 
       {/* ── Sidebar ── */}
       <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
         <div 
           className="sidebar-logo" 
+          role="button"
+          tabIndex={0}
           onClick={() => navigate('/')} 
+          onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') { navigate('/') } }}
           style={{ cursor: 'pointer' }}
           aria-label="Go to dashboard"
         >
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              <Shield size={22} strokeWidth={2.4} />
+            <span className="brand-mark" aria-hidden="true" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+              <img src="/logos/nexusshield.png" alt="NexusShield Logo" className="brand-logo" style={{ borderRadius: '10px' }} />
             </span>
-            <span className="brand-name">BSAFE</span>
+            <span className="brand-name">NexusShield</span>
           </div>
         </div>
 
@@ -443,19 +490,17 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/*" element={
                 <Protected>
-                  <OnboardingGate>
-                    <Layout>
-                      <Routes>
-                        <Route path="/" element={<DashboardPage />} />
-                        <Route path="/history" element={<HistoryPage />} />
-                        <Route path="/live" element={<LiveFeedPage />} />
-                        <Route path="/analytics" element={<AnalyticsPage />} />
-                        <Route path="/devices" element={<DeviceManagementPage />} />
-                        <Route path="/access" element={<UserManagementPage />} />
-                        <Route path="/settings" element={<SettingsPage />} />
-                      </Routes>
-                    </Layout>
-                  </OnboardingGate>
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/live" element={<LiveFeedPage />} />
+                      <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/devices" element={<DeviceManagementPage />} />
+                      <Route path="/access" element={<UserManagementPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                    </Routes>
+                  </Layout>
                 </Protected>
               } />
             </Routes>

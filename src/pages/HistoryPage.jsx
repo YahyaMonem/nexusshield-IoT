@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
 import { formatDistanceToNow, format } from 'date-fns'
 import { Download, X, Image, Filter } from 'lucide-react'
@@ -13,8 +13,8 @@ export default function HistoryPage() {
     const [filterSev, setFilterSev] = useState('all')
     const [devices, setDevices] = useState([])
     const [filterDev, setFilterDev] = useState('all')
-    const newEventIds = useRef(new Set())
-    const timeoutRef = useRef(null)
+    const [highlightedEventIds, setHighlightedEventIds] = useState(new Set())
+    const activeTimeouts = useRef(new Set())
     const { addToast } = useToast()
 
     useEffect(() => {
@@ -37,7 +37,11 @@ export default function HistoryPage() {
                     .single()
 
                 if (data) {
-                    newEventIds.current.add(data.id)
+                    setHighlightedEventIds(prev => {
+                        const next = new Set(prev)
+                        next.add(data.id)
+                        return next
+                    })
                     setEvents(prev => [data, ...prev].slice(0, 100))
 
                     // Toast notification
@@ -51,17 +55,23 @@ export default function HistoryPage() {
                     })
 
                     // Remove "new" highlight after 2s
-                    timeoutRef.current = setTimeout(() => {
-                        newEventIds.current.delete(data.id)
-                        setEvents(prev => [...prev])
+                    const id = setTimeout(() => {
+                        setHighlightedEventIds(prev => {
+                            const next = new Set(prev)
+                            next.delete(data.id)
+                            return next
+                        })
+                        activeTimeouts.current.delete(id)
                     }, 2000)
+                    activeTimeouts.current.add(id)
                 }
             })
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
-            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            activeTimeouts.current.forEach(clearTimeout)
+            activeTimeouts.current.clear()
         }
     }, [])
 
@@ -135,12 +145,14 @@ export default function HistoryPage() {
         a.click(); URL.revokeObjectURL(url)
     }
 
-    const filtered = events.filter(ev => {
-        if (filterType !== 'all' && ev.event_type !== filterType) return false
-        if (filterSev !== 'all' && ev.severity !== filterSev) return false
-        if (filterDev !== 'all' && ev.device_id !== filterDev) return false
-        return true
-    })
+    const filtered = useMemo(() => {
+        return events.filter(ev => {
+            if (filterType !== 'all' && ev.event_type !== filterType) return false
+            if (filterSev !== 'all' && ev.severity !== filterSev) return false
+            if (filterDev !== 'all' && ev.device_id !== filterDev) return false
+            return true
+        })
+    }, [events, filterType, filterDev, filterSev])
 
     return (
         <div>
@@ -197,9 +209,8 @@ export default function HistoryPage() {
                                     ? MOTION_SEVERITY_META[motionSev]
                                     : (SEVERITY[ev.severity] || SEVERITY.low)
                                 const img = ev.snapshots?.[0]?.image_url
-                                const isNew = newEventIds.current.has(ev.id)
                                 return (
-                                    <tr key={ev.id} className={isNew ? 'new-row' : ''}>
+                                    <tr key={ev.id} style={{ background: highlightedEventIds.has(ev.id) ? 'var(--bg-hover)' : 'transparent' }}>
                                         <td>
                                             <span className="badge" style={{ color: et.color, background: et.color + '18' }}>
                                                 <span className="badge-dot" style={{ background: et.color }} />
@@ -236,7 +247,7 @@ export default function HistoryPage() {
                                             )}
                                         </td>
                                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-                                            {format(new Date(ev.created_at), 'MMM d, HH:mm:ss')}
+                                            {format(new Date(ev.created_at), 'E d MMM h:mm a')}
                                         </td>
                                     </tr>
                                 )
@@ -256,7 +267,7 @@ export default function HistoryPage() {
                                     {EVENT_TYPES[snapshot.event_type]?.label || snapshot.event_type}
                                 </div>
                                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                                    {snapshot.devices?.name} · {format(new Date(snapshot.created_at), 'MMM d yyyy, HH:mm:ss')}
+                                    {snapshot.devices?.name} · {format(new Date(snapshot.created_at), 'E d MMM yyyy, h:mm a')}
                                 </div>
                             </div>
                             <button

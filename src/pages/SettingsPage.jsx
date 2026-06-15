@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { supabase, LOG_LEVELS } from '../supabaseClient'
 import { MOTION_SEVERITY_META } from '../motionSeverity'
 import { useAuth } from '../authContext'
@@ -29,6 +29,11 @@ export default function SettingsPage() {
     const [savingNotif, setSavingNotif] = useState(false)
     const [notifLoaded, setNotifLoaded] = useState(false)
 
+    const isMounted = useRef(true)
+    useEffect(() => {
+        return () => { isMounted.current = false }
+    }, [])
+
     useEffect(() => {
         fetchData()
     }, [])
@@ -58,6 +63,7 @@ export default function SettingsPage() {
     async function saveProfile() {
         setSavingProfile(true)
         const { error } = await supabase.from('profiles').update({ full_name: profile.full_name }).eq('id', session.user.id)
+        if (!isMounted.current) return
         if (error) {
             addToast({ type: 'high', title: 'Save Failed', message: error.message })
         } else {
@@ -77,6 +83,7 @@ export default function SettingsPage() {
             telegram_enabled: notifPrefs.telegram_enabled,
         }).eq('id', session.user.id)
 
+        if (!isMounted.current) return
         if (error) {
             addToast({ type: 'high', title: 'Save Failed', message: error.message })
         } else {
@@ -376,7 +383,7 @@ export default function SettingsPage() {
                                                         {log.message}
                                                     </td>
                                                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                                                        {format(new Date(log.created_at), 'MMM d, HH:mm:ss')}
+                                                        {format(new Date(log.created_at), 'E d MMM h:mm a')}
                                                     </td>
                                                 </tr>
                                             )
@@ -394,6 +401,7 @@ export default function SettingsPage() {
 
 // ── Toggle Row component ──────────────────────────────────────────────────
 function ToggleRow({ label, description, checked, onChange }) {
+    const id = useId()
     return (
         <div style={{
             display: 'flex',
@@ -404,7 +412,7 @@ function ToggleRow({ label, description, checked, onChange }) {
             borderBottom: '1px solid var(--border)',
         }}>
             <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+                <label htmlFor={id} style={{ fontSize: 13, fontWeight: 600, display: 'block', cursor: 'pointer' }}>{label}</label>
                 <div style={{
                     fontSize: 11,
                     fontFamily: 'var(--font-mono)',
@@ -416,6 +424,7 @@ function ToggleRow({ label, description, checked, onChange }) {
             </div>
             <label className="toggle">
                 <input
+                    id={id}
                     type="checkbox"
                     checked={checked}
                     onChange={e => onChange(e.target.checked)}

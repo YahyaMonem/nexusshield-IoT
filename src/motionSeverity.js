@@ -45,7 +45,7 @@ function isSecurityEntry(entry) {
 export function computeEventSeverity(entry, all) {
     if (!isSecurityEntry(entry)) return null
 
-    const ts   = new Date(entry.created_at)
+    const ts   = entry._date || new Date(entry.created_at)
     const hour = ts.getHours()
 
     // HIGH — night window 00:00 – 05:59
@@ -53,12 +53,11 @@ export function computeEventSeverity(entry, all) {
 
     // MEDIUM — another event on the same device within 30 s
     const WINDOW_MS = 30_000
-    const hasCluster = all.some(other =>
-        other.id !== entry.id &&
-        isSecurityEntry(other) &&
-        other.device_id === entry.device_id &&
-        Math.abs(new Date(other.created_at) - ts) <= WINDOW_MS
-    )
+    const hasCluster = all.some(other => {
+        if (other.id === entry.id || !isSecurityEntry(other) || other.device_id !== entry.device_id) return false
+        const otherTs = other._date || new Date(other.created_at)
+        return Math.abs(otherTs - ts) <= WINDOW_MS
+    })
     if (hasCluster) return 'medium'
 
     return 'low'
@@ -72,9 +71,10 @@ export const computeMotionSeverity = computeEventSeverity
  * Non-security entries get `_severity = null`.
  */
 export function enrichWithSeverity(entries) {
-    return entries.map(e => ({
+    const parsedEvents = entries.map(e => ({ ...e, _date: new Date(e.created_at) }))
+    return parsedEvents.map(e => ({
         ...e,
-        _severity: computeEventSeverity(e, entries),
+        _severity: computeEventSeverity(e, parsedEvents),
     }))
 }
 

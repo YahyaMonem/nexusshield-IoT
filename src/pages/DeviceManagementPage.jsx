@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../authContext'
 import { useToast } from '../toastContext'
@@ -23,6 +23,11 @@ export default function DeviceManagementPage() {
     const [formStatus, setFormStatus] = useState('offline')
     const [formError, setFormError] = useState('')
 
+    const isMounted = useRef(true)
+    useEffect(() => {
+        return () => { isMounted.current = false }
+    }, [])
+
     useEffect(() => {
         fetchProfile()
         fetchDevices()
@@ -35,7 +40,9 @@ export default function DeviceManagementPage() {
             .select('role')
             .eq('id', session.user.id)
             .maybeSingle()
-        setProfile(data)
+        if (isMounted.current) {
+            setProfile(data)
+        }
     }
 
     async function fetchDevices() {
@@ -44,6 +51,7 @@ export default function DeviceManagementPage() {
             .from('devices')
             .select('*')
             .order('name')
+        if (!isMounted.current) return
         if (error) {
             addToast({ type: 'high', title: 'Load Failed', message: error.message })
         }
@@ -94,6 +102,7 @@ export default function DeviceManagementPage() {
                 })
                 .eq('id', editingDevice.id)
 
+            if (!isMounted.current) return
             if (error) {
                 setFormError(error.message)
                 setSaving(false)
@@ -110,6 +119,7 @@ export default function DeviceManagementPage() {
                     status: formStatus,
                 })
 
+            if (!isMounted.current) return
             if (error) {
                 setFormError(error.message)
                 setSaving(false)
@@ -132,6 +142,7 @@ export default function DeviceManagementPage() {
             .delete()
             .eq('id', deleteTarget.id)
 
+        if (!isMounted.current) return
         if (error) {
             addToast({ type: 'high', title: 'Delete Failed', message: error.message })
         } else {
@@ -248,6 +259,7 @@ export default function DeviceManagementPage() {
                                                         style={{ padding: '6px 10px' }}
                                                         onClick={() => openEditModal(dev)}
                                                         title="Edit device"
+                                                        aria-label="Edit device"
                                                     >
                                                         <Pencil size={13} />
                                                     </button>
@@ -256,6 +268,7 @@ export default function DeviceManagementPage() {
                                                         style={{ padding: '6px 10px', color: 'var(--red)' }}
                                                         onClick={() => setDeleteTarget(dev)}
                                                         title="Delete device"
+                                                        aria-label="Delete device"
                                                     >
                                                         <Trash2 size={13} />
                                                     </button>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../authContext'
@@ -40,6 +40,11 @@ export default function OnboardingPage() {
     const [step, setStep] = useState(0)
     const [saving, setSaving] = useState(false)
 
+    const isMounted = useRef(true)
+    useEffect(() => {
+        return () => { isMounted.current = false }
+    }, [])
+
     // Step 0 state (Device)
     const [deviceName, setDeviceName] = useState('')
     const [deviceLocation, setDeviceLocation] = useState('')
@@ -78,12 +83,13 @@ export default function OnboardingPage() {
             .filter(e => e.length > 0)
 
         // Save profile settings
-        const { error: profileError } = await supabase.from('profiles').update({
+        const { error: profileError } = await supabase.from('profiles').upsert({
+            id: session.user.id,
             onboarding_complete: true,
             use_case: selectedUseCases,
             camera_access: accessLevel,
             camera_access_emails: emailList,
-        }).eq('id', session.user.id)
+        }, { onConflict: 'id' })
 
         if (profileError) {
             console.error("Onboarding Save Error:", profileError)
@@ -100,6 +106,9 @@ export default function OnboardingPage() {
                 serial_number: deviceSerial,
                 status: 'offline',
             }).select().single()
+            
+            if (!isMounted.current) return
+            
             if (deviceError) {
                 console.error("Device Registration Error:", deviceError)
                 addToast({ type: 'high', title: 'Error', message: 'Failed to register device: ' + deviceError.message })
@@ -117,6 +126,7 @@ export default function OnboardingPage() {
             }
         }
 
+        if (!isMounted.current) return
         setSaving(false)
         navigate('/')
     }
@@ -262,7 +272,16 @@ export default function OnboardingPage() {
                                 return (
                                     <button
                                         key={uc.id}
+                                        role="radio"
+                                        aria-checked={selected}
+                                        tabIndex={0}
                                         onClick={() => toggleUseCase(uc.id)}
+                                        onKeyDown={e => {
+                                            if (e.key === ' ' || e.key === 'Enter') {
+                                                e.preventDefault()
+                                                toggleUseCase(uc.id)
+                                            }
+                                        }}
                                         style={{
                                             display: 'flex', alignItems: 'flex-start', gap: 12,
                                             padding: 16, borderRadius: 12, cursor: 'pointer',
@@ -310,7 +329,16 @@ export default function OnboardingPage() {
                                 return (
                                     <button
                                         key={opt.id}
+                                        role="radio"
+                                        aria-checked={selected}
+                                        tabIndex={0}
                                         onClick={() => setAccessLevel(opt.id)}
+                                        onKeyDown={e => {
+                                            if (e.key === ' ' || e.key === 'Enter') {
+                                                e.preventDefault()
+                                                setAccessLevel(opt.id)
+                                            }
+                                        }}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: 14,
                                             padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
