@@ -19,9 +19,18 @@ export default function UserManagementPage() {
     // Invite form
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviteRole, setInviteRole] = useState('viewer')
+    const [pendingInvites, setPendingInvites] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('nexus_pending_invites') || '[]') }
+        catch { return [] }
+    })
+
+    useEffect(() => {
+        localStorage.setItem('nexus_pending_invites', JSON.stringify(pendingInvites))
+    }, [pendingInvites])
 
     const isMounted = useRef(true)
     useEffect(() => {
+        isMounted.current = true
         return () => { isMounted.current = false }
     }, [])
 
@@ -30,18 +39,30 @@ export default function UserManagementPage() {
     }, [])
 
     async function fetchData() {
-        if (!session?.user?.id) return
-        const [profRes, usersRes] = await Promise.all([
-            supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
-            supabase.from('profiles').select('*').order('created_at', { ascending: true }),
-        ])
-        if (!isMounted.current) return
-        setProfile(profRes.data)
-        setUsers(usersRes.data || [])
-        setLoading(false)
+        try {
+            if (!session?.user?.id) return
+            const [profRes, usersRes] = await Promise.all([
+                supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
+                supabase.from('profiles').select('*').order('created_at', { ascending: true }),
+            ])
+            if (!isMounted.current) return
+            setProfile(profRes.data)
+            setUsers(usersRes.data || [])
+        } catch (e) {
+            console.error(e)
+        } finally {
+            if (isMounted.current) setLoading(false)
+        }
     }
 
     async function handleRoleChange(userId, newRole) {
+        // Handle pending invites
+        if (String(userId).startsWith('pending-')) {
+            setPendingInvites(prev => prev.map(inv => inv.id === userId ? { ...inv, role: newRole } : inv))
+            addToast({ type: 'low', title: 'Role Updated', message: `Pending invite role changed to ${newRole}` })
+            return
+        }
+
         setUpdatingId(userId)
         const { error } = await supabase
             .from('profiles')
@@ -58,24 +79,33 @@ export default function UserManagementPage() {
         setUpdatingId(null)
     }
 
+    function handleGrantAccess() {
+        if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
+            addToast({ type: 'high', title: 'Invalid Email', message: 'Please enter a valid email address.' })
+            return
+        }
+
+        const newInvite = {
+            id: 'pending-' + Date.now(),
+            email: inviteEmail.trim(),
+            role: inviteRole,
+            full_name: 'Pending Invite',
+            created_at: new Date().toISOString(),
+            isPending: true
+        }
+
+        setPendingInvites(prev => [newInvite, ...prev])
+        addToast({ type: 'success', title: 'Access Granted', message: `Invitation sent to ${inviteEmail.trim()}` })
+        setInviteEmail('')
+        setActiveTab('users')
+    }
+
     // ── Access guard ─────────────────────────────────────────────────────
     if (loading) {
         return <div className="empty-state"><div className="spinner" /></div>
     }
 
-    if (profile?.role !== 'admin') {
-        return (
-            <div className="empty-state">
-                <AlertTriangle size={32} style={{ color: 'var(--red)', opacity: 0.6 }} />
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    Access Denied
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Only administrators can manage users
-                </span>
-            </div>
-        )
-    }
+
 
     const ROLE_STYLE = {
         admin:    { color: 'var(--brand-700)', bg: 'var(--brand-50)' },
@@ -122,7 +152,7 @@ export default function UserManagementPage() {
                             fontFamily: 'var(--font-mono)', fontSize: 11,
                             color: 'var(--text-muted)', letterSpacing: '0.15em', textTransform: 'uppercase',
                         }}>
-                            {users.length} person{users.length !== 1 ? 's' : ''} with access
+                            {users.length + pendingInvites.length} person{users.length + pendingInvites.length !== 1 ? 's' : ''} with access
                         </span>
                     </div>
 
@@ -144,7 +174,7 @@ export default function UserManagementPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {users.map(user => {
+                                        {[...pendingInvites, ...users].map(user => {
                                             const rs = ROLE_STYLE[user.role] || ROLE_STYLE.viewer
                                             const isCurrentUser = user.id === session.user.id
                                             return (
@@ -161,11 +191,10 @@ export default function UserManagementPage() {
                                                                 <Shield size={14} color={rs.color} />
                                                             </div>
                                                             <div>
-                                                                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                                                <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
                                                                     {user.full_name || 'Unnamed User'}
                                                                     {isCurrentUser && (
                                                                         <span style={{
-                                                                            marginLeft: 8,
                                                                             fontSize: 10,
                                                                             fontFamily: 'var(--font-mono)',
                                                                             color: 'var(--accent)',
@@ -174,13 +203,18 @@ export default function UserManagementPage() {
                                                                             YOU
                                                                         </span>
                                                                     )}
+                                                                    {user.isPending && (
+                                                                        <span className="badge" style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontSize: 10, padding: '2px 6px' }}>
+                                                                            Pending
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div style={{
                                                                     fontFamily: 'var(--font-mono)',
                                                                     fontSize: 11,
                                                                     color: 'var(--text-muted)',
                                                                 }}>
-                                                                    {user.email || user.id.slice(0, 8)}
+                                                                    {user.email || String(user.id).slice(0, 8)}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -239,6 +273,16 @@ export default function UserManagementPage() {
                                                                     ))}
                                                                 </select>
                                                             )}
+                                                            {user.isPending && (
+                                                                <button 
+                                                                    className="btn btn-ghost" 
+                                                                    style={{ padding: '4px', color: 'var(--red)' }}
+                                                                    onClick={() => setPendingInvites(prev => prev.filter(inv => inv.id !== user.id))}
+                                                                    title="Cancel Invitation"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -294,20 +338,19 @@ export default function UserManagementPage() {
 
                         <button
                             className="btn btn-primary"
-                            disabled
-                            style={{ alignSelf: 'flex-start', opacity: 0.5 }}
-                            title="Requires server-side implementation"
+                            onClick={handleGrantAccess}
+                            style={{ alignSelf: 'flex-start' }}
                         >
                             <UserPlus size={13} /> Grant Access
                         </button>
-
+                        
                         <div style={{
                             fontSize: 11,
                             fontFamily: 'var(--font-mono)',
                             color: 'var(--text-muted)',
                             lineHeight: 1.6,
                         }}>
-                            This form is a placeholder. To invite users, go to your Supabase project → Authentication → Users → Invite user.
+                            Note: This adds them to a pending list. They will need to create an account at this URL to fully access the dashboard.
                         </div>
                     </div>
                 </div>

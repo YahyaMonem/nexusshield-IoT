@@ -9,6 +9,7 @@ export function isAlertEmailConfigured() {
 }
 
 export const sendSecurityAlertEmail = async ({
+    to_email,
     alertTitle,
     alertMessage,
     alertType,
@@ -25,6 +26,7 @@ export const sendSecurityAlertEmail = async ({
     }
 
     const templateParams = {
+        to_email: to_email || 'igjv43@gmail.com',
         app_name: 'NexusShield',
         alert_title: alertTitle || 'Security Alert',
         alert_message: alertMessage || 'Motion or suspicious activity detected.',

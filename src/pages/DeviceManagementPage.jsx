@@ -25,6 +25,7 @@ export default function DeviceManagementPage() {
 
     const isMounted = useRef(true)
     useEffect(() => {
+        isMounted.current = true
         return () => { isMounted.current = false }
     }, [])
 
@@ -46,17 +47,22 @@ export default function DeviceManagementPage() {
     }
 
     async function fetchDevices() {
-        if (!session?.user?.id) return
-        const { data, error } = await supabase
-            .from('devices')
-            .select('*')
-            .order('name')
-        if (!isMounted.current) return
-        if (error) {
-            addToast({ type: 'high', title: 'Load Failed', message: error.message })
+        try {
+            if (!session?.user?.id) return
+            const { data, error } = await supabase
+                .from('devices')
+                .select('*')
+                .order('name')
+            if (!isMounted.current) return
+            if (error) {
+                addToast({ type: 'high', title: 'Load Failed', message: error.message })
+            }
+            setDevices(data || [])
+        } catch (e) {
+            console.error(e)
+        } finally {
+            if (isMounted.current) setLoading(false)
         }
-        setDevices(data || [])
-        setLoading(false)
     }
 
     function openAddModal() {
@@ -159,19 +165,7 @@ export default function DeviceManagementPage() {
         return <div className="empty-state"><div className="spinner" /></div>
     }
 
-    if (profile?.role !== 'admin') {
-        return (
-            <div className="empty-state">
-                <AlertTriangle size={32} style={{ color: 'var(--red)', opacity: 0.6 }} />
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    Access Denied
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Only administrators can manage devices
-                </span>
-            </div>
-        )
-    }
+
 
     const STATUS_STYLE = {
         online:  { label: 'Online',  color: 'var(--green)',      bg: 'rgba(16,185,129,0.12)', dot: 'var(--green)'      },

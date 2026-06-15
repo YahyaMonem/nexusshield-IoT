@@ -266,11 +266,13 @@ function buildSecurityEmailPayload(event) {
 
 function Layout({ children }) {
   const { session } = useAuth()
+  const { addToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
   const [realtimeOk, setRealtimeOk] = useState(true)
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [pendingInvite, setPendingInvite] = useState(null)
   const emailedEventIdsRef = useRef(new Set())
   const emailNotifsRef = useRef(false)
 
@@ -287,6 +289,29 @@ function Layout({ children }) {
     channel.subscribe(status => setRealtimeOk(status === 'SUBSCRIBED'))
     return () => supabase.removeChannel(channel)
   }, [session])
+
+  useEffect(() => {
+    if (!session?.user?.email) return
+    try {
+      const invites = JSON.parse(localStorage.getItem('nexus_pending_invites') || '[]')
+      const invite = invites.find(inv => inv.email === session.user.email)
+      if (invite) setPendingInvite(invite)
+    } catch(e) {}
+  }, [session])
+
+  const handleAcceptInvite = async () => {
+    if (!pendingInvite) return
+    try {
+      await supabase.from('profiles').update({ role: pendingInvite.role }).eq('id', session.user.id)
+      setProfile(prev => ({ ...prev, role: pendingInvite.role }))
+      const invites = JSON.parse(localStorage.getItem('nexus_pending_invites') || '[]')
+      const newInvites = invites.filter(inv => inv.email !== session.user.email)
+      localStorage.setItem('nexus_pending_invites', JSON.stringify(newInvites))
+      setPendingInvite(null)
+    } catch(e) {
+      console.error(e)
+    }
+  }
 
   useEffect(() => {
     if (!session) return
@@ -316,13 +341,24 @@ function Layout({ children }) {
 
           sendSecurityAlertEmail({
             ...emailPayload,
+            to_email: session.user.email,
             eventType: event.event_type,
             deviceName: event.devices?.name || 'Unknown device',
             severity: event.severity,
             time: new Date(event.created_at).toLocaleString(),
           }).then(
-            () => console.log('SUCCESS: Security alert email sent'),
-            (error) => console.log('FAILED to send security alert email', error)
+            (res) => {
+              console.log('SUCCESS: Security alert email sent', res)
+              if (res?.skipped) {
+                addToast({ type: 'low', title: 'Email Skipped', message: 'EmailJS keys missing or .env not loaded.' })
+              } else {
+                addToast({ type: 'success', title: 'Email Sent', message: 'EmailJS successfully sent the alert.' })
+              }
+            },
+            (error) => {
+              console.log('FAILED to send security alert email', error)
+              addToast({ type: 'high', title: 'Email Failed', message: error?.text || error?.message || 'Unknown EmailJS Error' })
+            }
           )
         } catch (error) {
           console.error("Error processing global alert email:", error)
@@ -445,6 +481,34 @@ function Layout({ children }) {
 
       {/* ── Main ── */}
       <div className="main-content">
+        {pendingInvite && (
+          <div style={{
+            background: 'var(--brand-600)',
+            color: 'white',
+            padding: '12px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 14,
+            zIndex: 100,
+          }}>
+            <div>You have been invited to join NexusShield as <strong style={{textTransform: 'capitalize'}}>{pendingInvite.role}</strong>.</div>
+            <button 
+              onClick={handleAcceptInvite}
+              style={{
+                background: 'white',
+                color: 'var(--brand-600)',
+                border: 'none',
+                padding: '6px 16px',
+                borderRadius: 'var(--radius)',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}>
+              Accept Invitation
+            </button>
+          </div>
+        )}
         <header className="topbar">
           <div className="topbar-left">
             <button

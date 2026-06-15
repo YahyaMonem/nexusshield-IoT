@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
 import { format, formatDistanceToNow } from 'date-fns'
-import { Activity, Camera, AlertTriangle, Clock } from 'lucide-react'
+import { Activity, Camera, AlertTriangle, Clock, Search, Plus, UserCheck } from 'lucide-react'
 import { useToast } from '../toastContext'
 import { computeMotionSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
 
@@ -24,6 +24,11 @@ export default function DashboardPage() {
     const [stats, setStats] = useState({ todayEvents: 0, activeDevices: 0, highSeverity: 0, lastEvent: null })
     const [recentEvents, setRecent] = useState([])
     const [devices, setDevices] = useState([])
+    const [faces, setFaces] = useState([])
+    const [faceSearch, setFaceSearch] = useState('')
+    const [addingFace, setAddingFace] = useState(false)
+    const [newFaceName, setNewFaceName] = useState('')
+    const [newFaceRel, setNewFaceRel] = useState('child')
     const [loading, setLoading] = useState(true)
     const [channelStatus, setChannelStatus] = useState('CONNECTING')
     const { addToast } = useToast()
@@ -34,7 +39,7 @@ export default function DashboardPage() {
         async function fetchAll() {
             const today = new Date(); today.setHours(0, 0, 0, 0)
 
-            const [eventsRes, devicesRes, recentRes, highRes] = await Promise.all([
+            const [eventsRes, devicesRes, recentRes, highRes, facesRes] = await Promise.all([
                 supabase.from('events').select('id', { count: 'exact' })
                     .gte('created_at', today.toISOString()),
                 supabase.from('devices').select('*'),
@@ -42,6 +47,7 @@ export default function DashboardPage() {
                     .order('created_at', { ascending: false }).limit(8),
                 supabase.from('events').select('id', { count: 'exact' })
                     .eq('severity', 'high').gte('created_at', today.toISOString()),
+                supabase.from('known_faces').select('*').order('created_at', { ascending: false }),
             ])
 
             if (isMounted) {
@@ -56,6 +62,7 @@ export default function DashboardPage() {
                 })
                 setDevices(devicesRes.data || [])
                 setRecent(recentRes.data || [])
+                setFaces(facesRes.data || [])
                 setLoading(false)
             }
         }
@@ -121,6 +128,40 @@ export default function DashboardPage() {
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+    async function handleAddFace() {
+        if (!newFaceName.trim()) return
+        const { data, error } = await supabase.from('known_faces').insert({
+            name: newFaceName.trim(),
+            relationship: newFaceRel,
+            is_trusted: true,
+        }).select().single()
+
+        if (error) {
+            addToast({ type: 'high', title: 'Error', message: error.message })
+        } else {
+            setFaces([data, ...faces])
+            setAddingFace(false)
+            setNewFaceName('')
+            addToast({ type: 'success', title: 'Face Added', message: `${data.name} added to Known Faces.` })
+        }
+    }
+
+    async function handleTestEvent() {
+        const testDeviceId = devices.length > 0 ? devices[0].id : null
+        
+        const { error } = await supabase.from('events').insert({
+            event_type: 'person_detected',
+            severity: 'high',
+            device_id: testDeviceId,
+        })
+        
+        if (error) {
+            addToast({ type: 'high', title: 'Test Failed', message: error.message })
+        } else {
+            console.log('Inserted test event successfully')
+        }
+    }
+
     if (loading) return (
         <div className="empty-state"><div className="spinner" /></div>
     )
@@ -162,8 +203,11 @@ export default function DashboardPage() {
             <div className="grid-2" style={{ marginTop: 8 }}>
                 {/* Recent Events */}
                 <div className="card">
-                    <div className="card-header">
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span className="card-title">Recent Events</span>
+                        <button className="btn btn-primary" onClick={handleTestEvent} style={{ padding: '4px 10px', fontSize: 12 }}>
+                            Test Event & Email
+                        </button>
                     </div>
                     {recentEvents.length === 0
                         ? <div className="empty-state">No events yet</div>
@@ -228,6 +272,99 @@ export default function DashboardPage() {
                             ))
                         }
                     </div>
+                </div>
+            </div>
+
+            {/* Known Faces Section */}
+            <div className="card" style={{ marginTop: 24 }}>
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <span className="card-title">Familiar Faces & Monitoring</span>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <div style={{ position: 'relative' }}>
+                            <Search size={14} style={{ position: 'absolute', left: 10, top: 9, color: 'var(--text-muted)' }} />
+                            <input 
+                                type="text" 
+                                placeholder="Search faces..." 
+                                value={faceSearch}
+                                onChange={e => setFaceSearch(e.target.value)}
+                                style={{
+                                    background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+                                    borderRadius: 'var(--radius)', padding: '6px 12px 6px 30px',
+                                    color: 'var(--text-primary)', fontSize: 13, width: 200, fontFamily: 'var(--font-sans)', outline: 'none'
+                                }}
+                            />
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setAddingFace(!addingFace)} style={{ padding: '6px 12px' }}>
+                            <Plus size={14} /> Add Face
+                        </button>
+                    </div>
+                </div>
+
+                {addingFace && (
+                    <div style={{ display: 'flex', gap: 12, padding: '16px', borderBottom: '1px solid var(--border-primary)', background: 'var(--bg-tertiary)', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input 
+                            type="text" 
+                            placeholder="Person's Name" 
+                            value={newFaceName}
+                            onChange={e => setNewFaceName(e.target.value)}
+                            style={{
+                                flex: 1, minWidth: 200,
+                                background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+                                borderRadius: 'var(--radius)', padding: '8px 12px',
+                                color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font-sans)', outline: 'none'
+                            }}
+                        />
+                        <select 
+                            value={newFaceRel} 
+                            onChange={e => setNewFaceRel(e.target.value)} 
+                            style={{
+                                width: 160,
+                                background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+                                borderRadius: 'var(--radius)', padding: '8px 12px',
+                                color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font-sans)', outline: 'none'
+                            }}
+                        >
+                            <option value="child">Child</option>
+                            <option value="family">Family Member</option>
+                            <option value="friend">Friend</option>
+                            <option value="service">Service Worker</option>
+                            <option value="trusted">Other Trusted</option>
+                        </select>
+                        <button className="btn btn-primary" onClick={handleAddFace} style={{ padding: '8px 16px' }}>Save Profile</button>
+                        <button className="btn btn-ghost" onClick={() => setAddingFace(false)} style={{ padding: '8px 16px' }}>Cancel</button>
+                    </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, padding: 20 }}>
+                    {faces.filter(f => f.name.toLowerCase().includes(faceSearch.toLowerCase())).map(f => (
+                        <div key={f.id} style={{
+                            border: '1px solid var(--border-primary)', borderRadius: 'var(--radius)',
+                            padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16,
+                            background: 'var(--bg-surface)'
+                        }}>
+                            <div style={{
+                                width: 50, height: 50, borderRadius: '50%', background: 'var(--brand-50)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-600)',
+                                border: '1px solid var(--brand-200)'
+                            }}>
+                                <UserCheck size={24} />
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{f.name}</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-muted)', textTransform: 'capitalize', marginTop: 4 }}>
+                                    {f.relationship}
+                                </div>
+                                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-quaternary)', marginTop: 8 }}>
+                                    {f.visit_count} Visits Registered
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {faces.length === 0 && !addingFace && (
+                        <div style={{ color: 'var(--text-muted)', fontSize: 13, gridColumn: '1 / -1', textAlign: 'center', padding: '40px 0' }}>
+                            No familiar faces added yet. Click "Add Face" to start monitoring.
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

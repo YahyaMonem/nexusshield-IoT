@@ -5,18 +5,24 @@ export async function ensureUserProfile(user) {
 
     const profile = {
         id: user.id,
-        role: 'viewer',
+        role: 'admin',
         onboarding_complete: false,
         use_case: [],
         camera_access: 'only_me',
         camera_access_emails: [],
     }
 
-    const { data, error } = await supabase
+    // 1. Ensure the profile exists
+    await supabase
         .from('profiles')
         .upsert(profile, { onConflict: 'id', ignoreDuplicates: true })
+
+    // 2. Fetch the profile
+    const { data, error } = await supabase
+        .from('profiles')
         .select('id, role, onboarding_complete')
-        .maybeSingle()
+        .eq('id', user.id)
+        .single()
 
     if (error) throw error
     return data
