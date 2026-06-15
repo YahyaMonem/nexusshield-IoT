@@ -21,6 +21,7 @@ import { sendSecurityAlertEmail } from './alertEmail'
 
 import { AuthContext, useAuth } from './authContext'
 import { ToastProvider, useToast } from './toastContext'
+import { ThemeProvider } from './themeContext'
 
 function DownloadAppDropdown() {
   const [open, setOpen] = useState(false)
@@ -322,10 +323,10 @@ function Layout({ children }) {
           aria-label="Go to dashboard"
         >
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true" style={{ background: 'transparent', border: 'none', padding: 0 }}>
-              <img src="/logos/nexusshield.png" alt="NexusShield Logo" className="brand-logo" style={{ borderRadius: '10px' }} />
+            <span className="brand-mark" aria-hidden="true">
+              <Shield size={22} strokeWidth={2.4} />
             </span>
-            <span className="brand-name">NexusShield</span>
+            <span className="brand-name">BSAFE</span>
           </div>
         </div>
 
@@ -434,31 +435,33 @@ function Layout({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <ToastProvider>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/*" element={
-              <Protected>
-                <OnboardingGate>
-                  <Layout>
-                    <Routes>
-                      <Route path="/" element={<DashboardPage />} />
-                      <Route path="/history" element={<HistoryPage />} />
-                      <Route path="/live" element={<LiveFeedPage />} />
-                      <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/devices" element={<DeviceManagementPage />} />
-                      <Route path="/access" element={<UserManagementPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                    </Routes>
-                  </Layout>
-                </OnboardingGate>
-              </Protected>
-            } />
-          </Routes>
-        </AuthProvider>
-      </ToastProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/*" element={
+                <Protected>
+                  <OnboardingGate>
+                    <Layout>
+                      <Routes>
+                        <Route path="/" element={<DashboardPage />} />
+                        <Route path="/history" element={<HistoryPage />} />
+                        <Route path="/live" element={<LiveFeedPage />} />
+                        <Route path="/analytics" element={<AnalyticsPage />} />
+                        <Route path="/devices" element={<DeviceManagementPage />} />
+                        <Route path="/access" element={<UserManagementPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                      </Routes>
+                    </Layout>
+                  </OnboardingGate>
+                </Protected>
+              } />
+            </Routes>
+          </AuthProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   )
 }

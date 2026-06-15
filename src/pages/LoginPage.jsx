@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Shield } from 'lucide-react'
 
 export default function LoginPage() {
     const navigate = useNavigate()
@@ -43,7 +43,7 @@ export default function LoginPage() {
     return (
         <div style={{
             minHeight: '100vh',
-            background: '#ffffff',
+            background: 'transparent',
             display: 'flex',
         }}>
             {/* Left — Form */}
@@ -59,15 +59,17 @@ export default function LoginPage() {
                     <div style={{ marginBottom: 32 }}>
                         <div 
                             style={{
-                                height: 48,
-                                display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+                                height: 54,
+                                display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12,
                                 marginBottom: 24,
                                 cursor: 'pointer',
                             }}
                             onClick={() => navigate('/')}
-                            title="Click to refresh page and logo"
                         >
-                            <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '48px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+                            <span className="brand-mark" aria-hidden="true">
+                                <Shield size={22} strokeWidth={2.4} />
+                            </span>
+                            <span className="brand-name" style={{ fontSize: 22, fontWeight: 800 }}>BSAFE</span>
                         </div>
                         <h1 style={{
                             fontSize: 24,
@@ -187,22 +189,28 @@ export default function LoginPage() {
             {/* Right — Branding panel (hidden on mobile) */}
             <div style={{
                 width: '50%',
-                background: 'linear-gradient(135deg, var(--brand-50) 0%, #ede9fe 50%, var(--brand-100) 100%)',
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035)), var(--bg-glass)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 64,
                 borderLeft: '1px solid var(--border-primary)',
+                backdropFilter: 'blur(26px) saturate(130%)',
             }}
                 className="login-branding"
             >
                 <div style={{
-                    height: 80,
+                    width: 82,
+                    height: 82,
+                    borderRadius: 26,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     marginBottom: 32,
+                    background: 'linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04)), rgba(155,124,255,0.16)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    boxShadow: 'var(--shadow-md)',
                 }}>
-                    <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', borderRadius: '12px' }} />
+                    <Shield size={38} strokeWidth={2.2} />
                 </div>
                 <h2 style={{
                     fontSize: 28,
@@ -212,7 +220,7 @@ export default function LoginPage() {
                     marginBottom: 12,
                     letterSpacing: '-0.02em',
                 }}>
-                    NexusShield
+                    BSAFE
                 </h2>
                 <p style={{
                     fontSize: 16,

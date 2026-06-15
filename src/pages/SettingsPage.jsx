@@ -4,7 +4,8 @@ import { MOTION_SEVERITY_META } from '../motionSeverity'
 import { useAuth } from '../authContext'
 import { useToast } from '../toastContext'
 import { format } from 'date-fns'
-import { Save, User, Terminal, Bell, Send, Info } from 'lucide-react'
+import { Save, User, Terminal, Bell, Send, Info, Moon, Sun } from 'lucide-react'
+import { useTheme } from '../themeContext'
 
 export default function SettingsPage() {
     const { session } = useAuth()
@@ -14,6 +15,7 @@ export default function SettingsPage() {
     const [savingProfile, setSavingProfile] = useState(false)
     const [logFilter, setLogFilter] = useState('all')
     const [activeTab, setActiveTab] = useState('profile')
+    const { theme, setTheme } = useTheme()
 
     // ── Notification preferences ──────────────────────────────────────────
     const [notifPrefs, setNotifPrefs] = useState({
@@ -124,34 +126,70 @@ export default function SettingsPage() {
 
             {/* ── PROFILE TAB ── */}
             {activeTab === 'profile' && (
-                <div className="card" style={{ maxWidth: 480 }}>
-                    <div className="card-header"><span className="card-title">Your Profile</span></div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div>
-                            <label className="label">Full Name</label>
-                            <input
-                                className="input"
-                                value={profile.full_name || ''}
-                                onChange={e => setProfile(p => ({ ...p, full_name: e.target.value }))}
-                                placeholder="Your name"
-                            />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 480 }}>
+                    <div className="card">
+                        <div className="card-header"><span className="card-title">Appearance</span></div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                            <button
+                                className="btn"
+                                onClick={() => setTheme('light')}
+                                style={{
+                                    flex: 1, padding: 16, height: 'auto',
+                                    flexDirection: 'column', gap: 12,
+                                    borderColor: theme === 'light' ? 'var(--brand-600)' : 'var(--border-secondary)',
+                                    background: theme === 'light' ? 'var(--brand-50)' : 'transparent',
+                                    color: theme === 'light' ? 'var(--brand-600)' : 'var(--text-secondary)'
+                                }}
+                            >
+                                <Sun size={24} />
+                                <span>Light Theme</span>
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={() => setTheme('dark')}
+                                style={{
+                                    flex: 1, padding: 16, height: 'auto',
+                                    flexDirection: 'column', gap: 12,
+                                    borderColor: theme === 'dark' ? 'var(--brand-600)' : 'var(--border-secondary)',
+                                    background: theme === 'dark' ? 'var(--brand-50)' : 'transparent',
+                                    color: theme === 'dark' ? 'var(--brand-600)' : 'var(--text-secondary)'
+                                }}
+                            >
+                                <Moon size={24} />
+                                <span>Dark Theme</span>
+                            </button>
                         </div>
-                        <div>
-                            <label className="label">Email</label>
-                            <input className="input" value={session.user.email} disabled style={{ opacity: 0.5 }} />
+                    </div>
+
+                    <div className="card">
+                        <div className="card-header"><span className="card-title">Your Profile</span></div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            <div>
+                                <label className="label">Full Name</label>
+                                <input
+                                    className="input"
+                                    value={profile.full_name || ''}
+                                    onChange={e => setProfile(p => ({ ...p, full_name: e.target.value }))}
+                                    placeholder="Your name"
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Email</label>
+                                <input className="input" value={session.user.email} disabled style={{ opacity: 0.5 }} />
+                            </div>
+                            <div>
+                                <label className="label">Role</label>
+                                <input className="input" value={profile.role || 'viewer'} disabled style={{ opacity: 0.5 }} />
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                onClick={saveProfile}
+                                disabled={savingProfile}
+                                style={{ alignSelf: 'flex-start' }}
+                            >
+                                {savingProfile ? 'Saving...' : <><Save size={13} /> Save Profile</>}
+                            </button>
                         </div>
-                        <div>
-                            <label className="label">Role</label>
-                            <input className="input" value={profile.role || 'viewer'} disabled style={{ opacity: 0.5 }} />
-                        </div>
-                        <button
-                            className="btn btn-primary"
-                            onClick={saveProfile}
-                            disabled={savingProfile}
-                            style={{ alignSelf: 'flex-start' }}
-                        >
-                            {savingProfile ? 'Saving...' : <><Save size={13} /> Save Profile</>}
-                        </button>
                     </div>
                 </div>
             )}

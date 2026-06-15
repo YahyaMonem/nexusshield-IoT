@@ -193,7 +193,7 @@ export default function AnalyticsPage() {
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                             <XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                             <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
-                            <Tooltip content={<ChartTooltip />} />
+                            <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
                             <Area type="monotone" dataKey="count" name="Events" stroke="#7f56d9" fill="url(#eventsGradient)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -212,7 +212,7 @@ export default function AnalyticsPage() {
                                     <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
                                         {donutData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                                     </Pie>
-                                    <Tooltip content={<ChartTooltip />} />
+                                    <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
                                     <Legend
                                         iconType="circle"
                                         iconSize={8}
@@ -235,7 +235,7 @@ export default function AnalyticsPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                         <XAxis dataKey="hour" tick={AXIS_TICK} interval={1} axisLine={false} tickLine={false} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <Tooltip content={<ChartTooltip />} />
+                        <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
                         <Bar dataKey="count" name="Events" fill="#7f56d9" radius={[4, 4, 0, 0]} fillOpacity={0.88} />
                     </BarChart>
                 </ResponsiveContainer>
@@ -303,7 +303,7 @@ export default function AnalyticsPage() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                                 <XAxis type="number" tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
                                 <YAxis type="category" dataKey="name" tick={{ ...AXIS_TICK, fill: '#344054' }} width={130} axisLine={false} tickLine={false} />
-                                <Tooltip content={<ChartTooltip />} />
+                                <Tooltip content={<ChartTooltip />} isAnimationActive={false} cursor={{ fill: 'var(--bg-tertiary)' }} />
                                 <Bar dataKey="events" name="Events" fill="var(--green)" radius={[0, 4, 4, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
@@ -375,7 +375,7 @@ export default function AnalyticsPage() {
                                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                                     <XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                                     <YAxis tick={AXIS_TICK} allowDecimals={false} axisLine={false} tickLine={false} />
-                                    <Tooltip content={<ChartTooltip />} />
+                                    <Tooltip content={<ChartTooltip />} isAnimationActive={false} />
                                     <Legend iconType="circle" iconSize={8} wrapperStyle={LEGEND_STYLE} />
                                     <Area type="monotone" dataKey="high" stroke="#f87171" fill="url(#highGradient)" strokeWidth={2} dot={false} name="High" />
                                     <Area type="monotone" dataKey="medium" stroke="#fbbf24" fill="url(#mediumGradient)" strokeWidth={2} dot={false} name="Medium" />

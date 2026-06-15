@@ -292,7 +292,7 @@ function Select({ value, onChange, children }) {
             value={value}
             onChange={e => onChange(e.target.value)}
             style={{
-                background: '#ffffff',
+                background: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: 'var(--radius)',
                 color: 'var(--text-primary)',
