@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../authContext'
+import { useToast } from '../toastContext'
 import {
     Shield, Home, Baby, Dog, Building2, Package, Wrench,
     Users, UserRound, UsersRound, Mail,
@@ -35,8 +36,14 @@ const DEVICE_FEATURES = [
 export default function OnboardingPage() {
     const { session } = useAuth()
     const navigate = useNavigate()
+    const { addToast } = useToast()
     const [step, setStep] = useState(0)
     const [saving, setSaving] = useState(false)
+
+    // Step 0 state (Device)
+    const [deviceName, setDeviceName] = useState('')
+    const [deviceLocation, setDeviceLocation] = useState('')
+    const [deviceSerial, setDeviceSerial] = useState('')
 
     // Step 1 state
     const [selectedUseCases, setSelectedUseCases] = useState([])
@@ -70,18 +77,44 @@ export default function OnboardingPage() {
             .map(e => e.trim())
             .filter(e => e.length > 0)
 
-        const { error } = await supabase.from('profiles').update({
+        // Save profile settings
+        const { error: profileError } = await supabase.from('profiles').update({
             onboarding_complete: true,
             use_case: selectedUseCases,
             camera_access: accessLevel,
             camera_access_emails: emailList,
         }).eq('id', session.user.id)
 
-        if (error) {
-            console.error("Onboarding Save Error:", error)
-            alert("Failed to save: " + error.message + "\n\nDid you run the SQL migration to add these columns?")
+        if (profileError) {
+            console.error("Onboarding Save Error:", profileError)
+            addToast({ type: 'high', title: 'Error', message: 'Failed to save device configuration' })
             setSaving(false)
             return
+        }
+
+        // Register the device
+        if (deviceName.trim() && deviceLocation.trim()) {
+            const { data: deviceData, error: deviceError } = await supabase.from('devices').insert({
+                name: deviceName.trim(),
+                location: deviceLocation.trim(),
+                serial_number: deviceSerial,
+                status: 'offline',
+            }).select().single()
+            if (deviceError) {
+                console.error("Device Registration Error:", deviceError)
+                addToast({ type: 'high', title: 'Error', message: 'Failed to register device: ' + deviceError.message })
+            }
+
+            // Save feature toggles to device_config
+            if (deviceData) {
+                await supabase.from('device_config').upsert({
+                    device_id: deviceData.id,
+                    buzzer_enabled: features.buzzer_enabled,
+                    mic_enabled: features.mic_enabled,
+                    led_enabled: features.led_enabled,
+                    alert_sensitivity: features.alert_enabled ? 'high' : 'low'
+                })
+            }
         }
 
         setSaving(false)
@@ -89,6 +122,7 @@ export default function OnboardingPage() {
     }
 
     const canProceed = [
+        deviceName.trim().length > 0 && deviceLocation.trim().length > 0 && deviceSerial.trim().length > 0,
         selectedUseCases.length > 0,
         !!accessLevel,
         true, // features always valid
@@ -96,10 +130,11 @@ export default function OnboardingPage() {
     ]
 
     const STEPS = [
-        { title: 'Use Case',     number: 1 },
-        { title: 'Access',       number: 2 },
-        { title: 'Features',     number: 3 },
-        { title: 'Ready',        number: 4 },
+        { title: 'Device',       number: 1 },
+        { title: 'Use Case',     number: 2 },
+        { title: 'Access',       number: 3 },
+        { title: 'Features',     number: 4 },
+        { title: 'Ready',        number: 5 },
     ]
 
     return (
@@ -114,14 +149,11 @@ export default function OnboardingPage() {
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: 48 }}>
                 <div style={{
-                    width: 48, height: 48,
-                    background: 'var(--brand-50)',
-                    border: '1px solid var(--brand-100)',
-                    borderRadius: 12,
+                    height: 48,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     margin: '0 auto 20px',
                 }}>
-                    <Shield size={24} color="var(--brand-600)" />
+                    <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '48px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} />
                 </div>
                 <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
                     Welcome to NexusShield
@@ -170,8 +202,52 @@ export default function OnboardingPage() {
                 boxShadow: 'var(--shadow-sm)',
             }}>
 
-                {/* ── STEP 1: Use Case ── */}
+                {/* ── STEP 0: Connect Device ── */}
                 {step === 0 && (
+                    <div>
+                        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
+                            Connect your device
+                        </h2>
+                        <p style={{ fontSize: 14, color: 'var(--text-tertiary)', marginBottom: 24 }}>
+                            Please enter the details of the device you received from us.
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            <div>
+                                <label className="label">Device Name</label>
+                                <input
+                                    className="input"
+                                    type="text"
+                                    placeholder="e.g. Front Door Camera"
+                                    value={deviceName}
+                                    onChange={e => setDeviceName(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Location</label>
+                                <input
+                                    className="input"
+                                    type="text"
+                                    placeholder="e.g. Main Entrance"
+                                    value={deviceLocation}
+                                    onChange={e => setDeviceLocation(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Device Serial Number</label>
+                                <input
+                                    className="input"
+                                    type="text"
+                                    placeholder="e.g. NXS-123456"
+                                    value={deviceSerial}
+                                    onChange={e => setDeviceSerial(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── STEP 1: Use Case ── */}
+                {step === 1 && (
                     <div>
                         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
                             What will you use NexusShield for?
@@ -219,7 +295,7 @@ export default function OnboardingPage() {
                 )}
 
                 {/* ── STEP 2: Camera Access ── */}
-                {step === 1 && (
+                {step === 2 && (
                     <div>
                         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
                             Who can access your cameras?
@@ -289,7 +365,7 @@ export default function OnboardingPage() {
                 )}
 
                 {/* ── STEP 3: Device Features ── */}
-                {step === 2 && (
+                {step === 3 && (
                     <div>
                         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
                             Enable device features
@@ -342,7 +418,7 @@ export default function OnboardingPage() {
                 )}
 
                 {/* ── STEP 4: All Set ── */}
-                {step === 3 && (
+                {step === 4 && (
                     <div style={{ textAlign: 'center', padding: '24px 0' }}>
                         <div style={{
                             width: 64, height: 64, borderRadius: '50%',
@@ -370,6 +446,7 @@ export default function OnboardingPage() {
                             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-quaternary)', marginBottom: 12, textTransform: 'uppercase' }}>
                                 Your setup summary
                             </div>
+                            <SummaryRow label="Device" value={`${deviceName} (${deviceLocation})`} />
                             <SummaryRow label="Use case" value={selectedUseCases.map(id => USE_CASES.find(u => u.id === id)?.label).join(', ') || 'None selected'} />
                             <SummaryRow label="Camera access" value={ACCESS_OPTIONS.find(a => a.id === accessLevel)?.label || 'Only me'} />
                             <SummaryRow label="Buzzer" value={features.buzzer_enabled ? 'Enabled' : 'Disabled'} />
@@ -393,7 +470,7 @@ export default function OnboardingPage() {
                             <ChevronLeft size={16} /> Back
                         </button>
                     )}
-                    {step < 3 ? (
+                    {step < 4 ? (
                         <button
                             className="btn btn-primary"
                             onClick={() => setStep(s => s + 1)}

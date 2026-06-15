@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bell } from 'lucide-react'
-import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
+import { supabase } from '../supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function NotificationBell() {
@@ -8,6 +8,9 @@ export default function NotificationBell() {
     const [events, setEvents] = useState([])
     const [unreadCount, setUnreadCount] = useState(0)
     const dropdownRef = useRef(null)
+    const openRef = useRef(open)
+
+    useEffect(() => { openRef.current = open }, [open])
 
     // Load last viewed time from local storage
     const getLastViewed = () => {
@@ -53,23 +56,20 @@ export default function NotificationBell() {
         const channel = supabase
             .channel('bell-tracking-events')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tracking_events' }, payload => {
-                setEvents(prev => {
-                    const newEvents = [payload.new, ...prev].slice(0, 20)
-                    // If the dropdown is currently open, automatically update the last viewed time
-                    if (open) {
-                        markAsRead()
-                    } else {
-                        setUnreadCount(count => count + 1)
-                    }
-                    return newEvents
-                })
+                setEvents(prev => [payload.new, ...prev].slice(0, 20))
+                // If the dropdown is currently open, automatically update the last viewed time
+                if (openRef.current) {
+                    markAsRead()
+                } else {
+                    setUnreadCount(count => count + 1)
+                }
             })
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [open])
+    }, [])
 
     const handleToggle = () => {
         if (!open) {
@@ -79,22 +79,14 @@ export default function NotificationBell() {
     }
 
     return (
-        <div ref={dropdownRef} style={{ position: 'relative' }}>
+        <div ref={dropdownRef} className="notification-menu">
             {/* Bell Button */}
             <button 
                 onClick={handleToggle}
-                style={{
-                    position: 'relative',
-                    background: 'transparent',
-                    border: 'none',
-                    color: open ? 'var(--brand-500)' : 'var(--text-tertiary)',
-                    cursor: 'pointer',
-                    padding: 8,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'color 0.2s',
-                }}
+                className={`notification-trigger${open ? ' active' : ''}`}
+                aria-label="Notifications"
+                aria-haspopup="menu"
+                aria-expanded={open}
             >
                 <Bell size={20} />
                 {unreadCount > 0 && (
@@ -119,22 +111,7 @@ export default function NotificationBell() {
 
             {/* Dropdown Panel */}
             {open && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: 8,
-                    width: 320,
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-secondary)',
-                    borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-xl)',
-                    zIndex: 100,
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    maxHeight: 400,
-                }}>
+                <div className="notification-panel" role="menu">
                     <div style={{ padding: '16px', borderBottom: '1px solid var(--border-primary)' }}>
                         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Notifications</h3>
                     </div>
@@ -155,12 +132,11 @@ export default function NotificationBell() {
                                     cursor: 'pointer',
                                     transition: 'background 0.15s',
                                 }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                className="notification-item"
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                                            {ev.object_class.charAt(0).toUpperCase() + ev.object_class.slice(1)} Detected
+                                            {(ev.object_class || '?').charAt(0).toUpperCase() + (ev.object_class || '?').slice(1)} Detected
                                         </span>
                                         <span style={{ fontSize: 11, color: 'var(--text-quaternary)', whiteSpace: 'nowrap' }}>
                                             {formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}

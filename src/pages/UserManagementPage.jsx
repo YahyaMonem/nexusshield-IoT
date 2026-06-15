@@ -25,6 +25,7 @@ export default function UserManagementPage() {
     }, [])
 
     async function fetchData() {
+        if (!session?.user?.id) return
         const [profRes, usersRes] = await Promise.all([
             supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
             supabase.from('profiles').select('*').order('created_at', { ascending: true }),
@@ -83,7 +84,7 @@ export default function UserManagementPage() {
     return (
         <div>
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
+            <div className="tabs-scroll">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
@@ -240,22 +241,6 @@ export default function UserManagementPage() {
                             </div>
                         )}
                     </div>
-
-                    {/* Info note */}
-                    <div style={{
-                        marginTop: 16,
-                        padding: '12px 16px',
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius)',
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                        fontFamily: 'var(--font-mono)',
-                        lineHeight: 1.6,
-                    }}>
-                        <strong style={{ color: 'var(--text-secondary)' }}>Note:</strong> Removing users from the authentication system requires Supabase Admin API access.
-                        Use your Supabase dashboard to fully delete user accounts.
-                    </div>
                 </div>
             )}
 
@@ -266,20 +251,7 @@ export default function UserManagementPage() {
                         <span className="card-title">Grant Access to User</span>
                     </div>
 
-                    <div style={{
-                        padding: '14px 16px',
-                        background: 'rgba(0,229,255,0.06)',
-                        border: '1px solid rgba(0,229,255,0.15)',
-                        borderRadius: 'var(--radius)',
-                        marginBottom: 20,
-                        fontSize: 12,
-                        color: 'var(--text-secondary)',
-                        lineHeight: 1.6,
-                    }}>
-                        <strong style={{ color: 'var(--brand-600)' }}>ℹ Important:</strong>{' '}
-                        User invitations require the Supabase Auth Admin API, which cannot be called securely from the browser.
-                        Use your <strong>Supabase dashboard</strong> or a <strong>secure backend function</strong> to create new user accounts and grant them access.
-                    </div>
+
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         <div>

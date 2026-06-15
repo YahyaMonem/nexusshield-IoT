@@ -3,8 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocati
 import { supabase } from './supabaseClient'
 import {
   LayoutDashboard, BarChart3, Settings,
-  Shield, LogOut, User, Tv2, History,
-  HardDrive, ShieldCheck, ChevronDown, Download
+  Shield, LogOut, Tv2, History,
+  HardDrive, ShieldCheck, Download
 } from 'lucide-react'
 
 import LoginPage from './pages/LoginPage'
@@ -17,6 +17,7 @@ import SettingsPage from './pages/SettingsPage'
 import DeviceManagementPage from './pages/DeviceManagementPage'
 import UserManagementPage from './pages/UserManagementPage'
 import NotificationBell from './components/NotificationBell'
+import { sendSecurityAlertEmail } from './alertEmail'
 
 import { AuthContext, useAuth } from './authContext'
 import { ToastProvider, useToast } from './toastContext'
@@ -49,45 +50,30 @@ function DownloadAppDropdown() {
   }
 
   return (
-    <div ref={dropdownRef} style={{ position: 'relative' }}>
+    <div ref={dropdownRef} className="download-menu">
       <button
         onClick={() => setOpen(!open)}
-        className="btn btn-secondary"
-        style={{ padding: '6px 12px', fontSize: 13, gap: 6, display: 'flex', alignItems: 'center' }}
+        className="btn btn-secondary download-menu-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <Download size={14} />
-        Desktop App
+        <span className="desktop-download-label">Desktop App</span>
       </button>
 
       {open && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          right: 0,
-          marginTop: 8,
-          width: 200,
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-xl)',
-          zIndex: 100,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
+        <div className="download-menu-panel" role="menu">
           <button 
             onClick={() => handleDownload('macOS', 'https://github.com/yahyabamo/nexusshield-dashboard2/releases/download/v1.0.0/NexusShield-1.0.0-arm64.dmg')}
-            style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-primary)', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            className="download-menu-item"
+            role="menuitem"
           >
             Download for macOS (Apple Silicon)
           </button>
           <button 
             onClick={() => handleDownload('Windows', '/NexusShield-Windows-x64.exe')}
-            style={{ padding: '12px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            className="download-menu-item"
+            role="menuitem"
           >
             Download for Windows
           </button>
@@ -176,6 +162,82 @@ const PAGE_TITLES = {
   '/settings':  'Settings',
 }
 
+const EMAIL_ALERT_EVENTS = new Set([
+  'door',
+  'person_detected',
+  'dog_detected',
+  'cat_detected',
+  'unknown_face_detected',
+  'child_awake',
+  'child_movement',
+])
+
+function buildSecurityEmailPayload(event) {
+  const deviceName = event.devices?.name || 'Unknown device'
+
+  switch (event.event_type) {
+    case 'door':
+      return {
+        alertTitle: 'Door opened',
+        alertMessage: `Door opened on ${deviceName}`,
+        alertType: 'door',
+        objectClass: 'Door',
+        details: 'Door sensor reported an open event.',
+      }
+    case 'person_detected':
+      return {
+        alertTitle: 'Person detected',
+        alertMessage: `Person detected on ${deviceName}`,
+        alertType: 'person',
+        objectClass: 'Person',
+        details: 'Human presence detected by the edge device.',
+      }
+    case 'dog_detected':
+    case 'cat_detected': {
+      const animal = event.event_type === 'dog_detected' ? 'Dog' : 'Cat'
+      return {
+        alertTitle: `${animal} detected`,
+        alertMessage: `${animal} detected on ${deviceName}`,
+        alertType: 'pet',
+        objectClass: animal,
+        details: 'Pet movement detected by the edge device.',
+      }
+    }
+    case 'unknown_face_detected':
+      return {
+        alertTitle: 'Unknown face detected',
+        alertMessage: `Unknown face detected on ${deviceName}`,
+        alertType: 'unknown_face',
+        objectClass: 'Unknown Face',
+        details: 'Face recognition did not match a trusted person.',
+      }
+    case 'child_awake':
+      return {
+        alertTitle: 'Child awake',
+        alertMessage: `Child awake detected on ${deviceName}`,
+        alertType: 'child_monitor',
+        objectClass: 'Child',
+        details: 'Child monitoring rule detected waking or sustained movement.',
+      }
+    case 'child_movement':
+      return {
+        alertTitle: 'Child movement detected',
+        alertMessage: `Child movement detected on ${deviceName}`,
+        alertType: 'child_monitor',
+        objectClass: 'Child',
+        details: 'Child monitoring rule detected movement.',
+      }
+    default:
+      return {
+        alertTitle: 'Security Alert',
+        alertMessage: `Security event detected on ${deviceName}`,
+        alertType: 'security',
+        objectClass: 'Unknown',
+        details: 'Security event reported by the edge device.',
+      }
+  }
+}
+
 function Layout({ children }) {
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -183,16 +245,58 @@ function Layout({ children }) {
   const [realtimeOk, setRealtimeOk] = useState(true)
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const emailedEventIdsRef = useRef(new Set())
 
   useEffect(() => {
     if (!session) return
-    supabase.from('profiles').select('full_name, role').eq('id', session.user.id).maybeSingle()
+    supabase.from('profiles').select('full_name, role, email_notifications').eq('id', session.user.id).maybeSingle()
       .then(({ data }) => setProfile(data))
 
     const channel = supabase.channel('health')
     channel.subscribe(status => setRealtimeOk(status === 'SUBSCRIBED'))
     return () => supabase.removeChannel(channel)
   }, [session])
+
+  useEffect(() => {
+    if (!session) return
+
+    const channel = supabase
+      .channel('global-alert-emails')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'events',
+      }, async (payload) => {
+        if (profile?.email_notifications === false) return
+        if (emailedEventIdsRef.current.has(payload.new.id)) return
+
+        const { data: event } = await supabase
+          .from('events')
+          .select('id, event_type, severity, created_at, devices(name)')
+          .eq('id', payload.new.id)
+          .single()
+
+        if (!event || !EMAIL_ALERT_EVENTS.has(event.event_type)) return
+
+        emailedEventIdsRef.current.add(event.id)
+        if (emailedEventIdsRef.current.size > 1000) emailedEventIdsRef.current.clear()
+        const emailPayload = buildSecurityEmailPayload(event)
+
+        sendSecurityAlertEmail({
+          ...emailPayload,
+          eventType: event.event_type,
+          deviceName: event.devices?.name || 'Unknown device',
+          severity: event.severity,
+          time: new Date(event.created_at).toLocaleString(),
+        }).then(
+          () => console.log('SUCCESS: Security alert email sent'),
+          (error) => console.log('FAILED to send security alert email', error)
+        )
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [session, profile?.email_notifications])
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
@@ -211,10 +315,17 @@ function Layout({ children }) {
 
       {/* ── Sidebar ── */}
       <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
-        <div className="sidebar-logo">
+        <div 
+          className="sidebar-logo" 
+          onClick={() => navigate('/')} 
+          style={{ cursor: 'pointer' }}
+          aria-label="Go to dashboard"
+        >
           <div className="brand">
-            <Shield size={20} color="var(--brand-600)" />
-            NexusShield
+            <span className="brand-mark" aria-hidden="true" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+              <img src="/logos/nexusshield.png" alt="NexusShield Logo" className="brand-logo" style={{ borderRadius: '10px' }} />
+            </span>
+            <span className="brand-name">NexusShield</span>
           </div>
         </div>
 
@@ -249,19 +360,12 @@ function Layout({ children }) {
           <NavLink
             to="/settings"
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            style={{ marginBottom: 12 }}
           >
             <Settings size={20} className="icon" />
             Settings
           </NavLink>
 
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '12px 12px 4px',
-            borderTop: '1px solid var(--border-primary)',
-            marginTop: 4,
-            paddingTop: 16,
-          }}>
+          <div className="sidebar-user">
             <div style={{
               width: 40, height: 40, borderRadius: '50%',
               background: 'var(--brand-50)',
@@ -272,31 +376,18 @@ function Layout({ children }) {
             }}>
               {userInitial}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
+            <div className="sidebar-user-meta">
+              <div className="sidebar-user-name">
                 {profile?.full_name || session?.user?.email?.split('@')[0]}
               </div>
-              <div style={{
-                fontSize: 14, color: 'var(--text-tertiary)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
+              <div className="sidebar-user-email">
                 {session?.user?.email}
               </div>
             </div>
             <button
               onClick={handleSignOut}
               title="Sign out"
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--text-quaternary)', padding: 4,
-                display: 'flex', alignItems: 'center',
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-quaternary)'}
+              className="signout-btn"
             >
               <LogOut size={20} />
             </button>
@@ -328,7 +419,7 @@ function Layout({ children }) {
                 : { background: 'var(--bg-tertiary)', color: 'var(--text-quaternary)' }
             }>
               <div className={`connection-dot${realtimeOk ? '' : ' offline'}`} />
-              <span className="connection-label">{realtimeOk ? 'Connected' : 'Disconnected'}</span>
+              <span className="connection-label">{realtimeOk ? 'Cloud Connected' : 'Cloud Offline'}</span>
             </div>
           </div>
         </header>

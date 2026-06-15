@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { AlertTriangle, Info, CheckCircle, XCircle, X } from 'lucide-react'
 
 const ToastContext = createContext(null)
@@ -11,10 +11,11 @@ export function useToast() {
 
 // severity -> styling map
 const TOAST_STYLES = {
-  high:   { icon: XCircle,      accent: '#ef4444', bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.3)'   },
-  medium: { icon: AlertTriangle, accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)'  },
-  low:    { icon: CheckCircle,  accent: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)'  },
-  info:   { icon: Info,         accent: 'var(--brand-600)', bg: 'var(--brand-50)',  border: 'var(--brand-200)'  },
+  high:    { icon: XCircle,      accent: '#ef4444', bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.3)'   },
+  medium:  { icon: AlertTriangle, accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)'  },
+  low:     { icon: CheckCircle,  accent: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)'  },
+  success: { icon: CheckCircle,  accent: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)'  },
+  info:    { icon: Info,         accent: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)'  },
 }
 
 let nextId = 0
@@ -22,6 +23,13 @@ let nextId = 0
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const timers = useRef({})
+
+  // Clear all timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(timers.current).forEach(clearTimeout)
+    }
+  }, [])
 
   const dismiss = useCallback((id) => {
     // mark as leaving so the exit animation plays
@@ -74,7 +82,7 @@ function Toast({ toast, onDismiss }) {
         alignItems: 'flex-start',
         gap: 12,
         padding: '13px 16px',
-        background: '#ffffff',
+        background: 'var(--bg-primary, #ffffff)',
         border: `1px solid ${style.border}`,
         borderLeft: `3px solid ${style.accent}`,
         borderRadius: 10,

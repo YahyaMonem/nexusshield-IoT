@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase, LOG_LEVELS } from '../supabaseClient'
-import { enrichWithSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
+import { MOTION_SEVERITY_META } from '../motionSeverity'
 import { useAuth } from '../authContext'
 import { useToast } from '../toastContext'
 import { format } from 'date-fns'
@@ -83,14 +83,11 @@ export default function SettingsPage() {
         setSavingNotif(false)
     }
 
-    // Attach computed severity to each log entry (shared utility)
-    const enrichedLogs = enrichWithSeverity(logs)
-
     const filteredLogs = logFilter === 'all'
-        ? enrichedLogs
+        ? logs
         : logFilter === 'high' || logFilter === 'medium' || logFilter === 'low'
-            ? enrichedLogs.filter(l => l._severity === logFilter)
-            : enrichedLogs.filter(l => l.log_level === logFilter)
+            ? logs.filter(l => l._severity === logFilter)
+            : logs.filter(l => l.log_level === logFilter)
 
     const tabs = [
         { id: 'profile', label: 'Profile', icon: <User size={13} /> },
@@ -101,7 +98,7 @@ export default function SettingsPage() {
     return (
         <div>
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
+            <div className="tabs-scroll">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}

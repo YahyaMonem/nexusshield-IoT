@@ -1,9 +1,24 @@
 import { useState, useEffect } from 'react'
 import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
-import { formatDistanceToNow } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { Activity, Camera, AlertTriangle, Clock } from 'lucide-react'
 import { useToast } from '../toastContext'
 import { computeMotionSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
+
+const STALE_MS = 2 * 60 * 1000
+
+function getDeviceStatusKey(device) {
+    const lastSeen = device.last_seen_at ? new Date(device.last_seen_at) : null
+    const isRecentlySeen = lastSeen && (Date.now() - lastSeen.getTime()) <= STALE_MS
+
+    if (device.status === 'online' && isRecentlySeen) return 'online'
+    if (device.status === 'online' && !isRecentlySeen) return 'stale'
+    return 'offline'
+}
+
+function countOnlineDevices(devices) {
+    return devices.filter(d => getDeviceStatusKey(d) === 'online').length
+}
 
 export default function DashboardPage() {
     const [stats, setStats] = useState({ todayEvents: 0, activeDevices: 0, highSeverity: 0, lastEvent: null })
@@ -20,7 +35,7 @@ export default function DashboardPage() {
         const interval = setInterval(() => {
             supabase.from('devices').select('*').then(({ data }) => {
                 if (data) {
-                    const activeCount = data.filter(d => d.status === 'online').length
+                    const activeCount = countOnlineDevices(data)
                     setDevices(data)
                     setStats(prev => ({ ...prev, activeDevices: activeCount }))
                 }
@@ -93,7 +108,7 @@ export default function DashboardPage() {
                 .eq('severity', 'high').gte('created_at', today.toISOString()),
         ])
 
-        const activeCount = devicesRes.data?.filter(d => d.status === 'online').length || 0
+        const activeCount = countOnlineDevices(devicesRes.data || [])
         const lastEventTime = recentRes.data?.[0]?.created_at
 
         setStats({
@@ -154,7 +169,7 @@ export default function DashboardPage() {
                     {recentEvents.length === 0
                         ? <div className="empty-state">No events yet</div>
                         : (
-                            <div className="table-scroll"><table className="data-table">
+                            <div className="table-scroll dashboard-table-scroll"><table className="data-table dashboard-events-table">
                                 <thead>
                                     <tr>
                                         <th>Type</th>
@@ -186,8 +201,11 @@ export default function DashboardPage() {
                                                         {sv.label}
                                                     </span>
                                                 </td>
-                                                <td style={{ color: 'var(--text-quaternary)', fontSize: 13 }}>
-                                                    {formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}
+                                                <td
+                                                    style={{ color: 'var(--text-quaternary)', fontSize: 13 }}
+                                                    title={formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}
+                                                >
+                                                    {format(new Date(ev.created_at), 'MMM d, HH:mm')}
                                                 </td>
                                             </tr>
                                         )
@@ -240,18 +258,13 @@ function DeviceStatusRow({ device }) {
     //   online  → status=online  AND last_seen_at within the last 2 minutes
     //   stale   → status=online  BUT last_seen_at is > 2 minutes ago (lost power / crashed)
     //   offline → status=offline (or no last_seen_at)
-    const STALE_MS = 2 * 60 * 1000   // 2 minutes
     const lastSeen = device.last_seen_at ? new Date(device.last_seen_at) : null
-    const isRecentlySeen = lastSeen && (Date.now() - lastSeen.getTime()) <= STALE_MS
 
-    let statusKey
-    if (device.status === 'online' && isRecentlySeen) statusKey = 'online'
-    else if (device.status === 'online' && !isRecentlySeen) statusKey = 'stale'
-    else statusKey = 'offline'
+    const statusKey = getDeviceStatusKey(device)
 
     const STATUS_STYLE = {
         online:  { label: 'Online',       color: 'var(--green)',    dot: 'var(--green)',    bg: 'rgba(16,185,129,0.12)',  icon: 'var(--green)'    },
-        stale:   { label: 'Disconnected', color: '#fbbf24',         dot: '#fbbf24',         bg: 'rgba(251,191,36,0.12)', icon: '#fbbf24'         },
+        stale:   { label: 'Disconnected', color: 'var(--red)',      dot: 'var(--red)',      bg: 'rgba(239,68,68,0.10)', icon: 'var(--red)'      },
         offline: { label: 'Offline',      color: 'var(--text-muted)', dot: 'var(--text-muted)', bg: 'var(--bg-hover)',    icon: 'var(--text-muted)' },
     }
     const s = STATUS_STYLE[statusKey]
@@ -267,8 +280,8 @@ function DeviceStatusRow({ device }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
                     width: 32, height: 32, borderRadius: 8,
-                    background: statusKey === 'online' ? 'rgba(16,185,129,0.1)' : statusKey === 'stale' ? 'rgba(251,191,36,0.1)' : 'var(--bg-hover)',
-                    border: `1px solid ${statusKey === 'online' ? 'rgba(16,185,129,0.3)' : statusKey === 'stale' ? 'rgba(251,191,36,0.3)' : 'var(--border)'}`,
+                    background: statusKey === 'online' ? 'rgba(16,185,129,0.1)' : statusKey === 'stale' ? 'rgba(239,68,68,0.08)' : 'var(--bg-hover)',
+                    border: `1px solid ${statusKey === 'online' ? 'rgba(16,185,129,0.3)' : statusKey === 'stale' ? 'rgba(239,68,68,0.22)' : 'var(--border)'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                     <Camera size={14} color={s.icon} />

@@ -24,6 +24,8 @@ The **NexusShield Dashboard** is a React frontend that displays and manages IoT 
 
 ## What the Edge Device Should Do
 
+The dashboard is ready to display and alert on hardware/edge events, but the edge device must still run the actual camera pipeline. For production, run object detection and face recognition on the Raspberry Pi, camera gateway, or server, then write results to Supabase.
+
 ### 1. Device Heartbeat / Status
 
 Periodically update the device's status and `last_seen_at` timestamp:
@@ -63,8 +65,87 @@ requests.post(
     headers=headers,
     json={
         "device_id": DEVICE_ID,
-        "event_type": "motion",       # or: person_detected, door, camera_offline, etc.
+        "event_type": "motion",       # see supported event types below
         "severity": "medium",         # low, medium, high
+    }
+)
+```
+
+### Supported event types
+
+Use these exact `event_type` values when the edge device writes to `events`:
+
+| Event type | Meaning | Alert behavior |
+|------------|---------|----------------|
+| `motion` | Generic motion detected | Dashboard event |
+| `door` | Door sensor opened | Email alert |
+| `person_detected` | Human detected by object detection | Email alert |
+| `dog_detected` | Dog detected by object detection | Email alert |
+| `cat_detected` | Cat detected by object detection | Email alert |
+| `safe_face_recognized` | Trusted face matched | Stored/displayed, no danger alert |
+| `unknown_face_detected` | Face did not match trusted list | Email alert |
+| `child_awake` | Child wake rule triggered | Email alert to parent |
+| `child_movement` | Child movement rule triggered | Email alert to parent |
+| `camera_offline` | Camera lost connection | Dashboard event |
+| `camera_online` | Camera came back online | Dashboard event |
+| `system_error` | Edge/device system error | Dashboard event |
+
+### ML classification expectations
+
+The current browser Live Feed uses COCO-SSD and can classify `person`, `dog`, and `cat` while the page is open. The hardware/edge device should do the same continuously, even when the dashboard is closed.
+
+Recommended edge stack:
+
+- Object detection: YOLOv8n/YOLOv8s, MobileNet SSD, or TensorFlow Lite object detection.
+- Face recognition: detect face, compute embedding, compare against `known_faces.face_embedding`.
+- Trusted/safe face rule: if matched against `known_faces.is_trusted = true`, insert `safe_face_recognized` and do not alert as danger.
+- Unknown face rule: if no trusted match over the confidence threshold, insert `unknown_face_detected`.
+- Child monitoring rule: if child camera sees movement/awake behavior during configured sleep window, insert `child_movement` or `child_awake`.
+
+Example event payloads:
+
+```python
+# Human at front door
+requests.post(
+    f"{SUPABASE_URL}/rest/v1/events",
+    headers=headers,
+    json={
+        "device_id": DEVICE_ID,
+        "event_type": "person_detected",
+        "severity": "high",
+    }
+)
+
+# Trusted parent recognized
+requests.post(
+    f"{SUPABASE_URL}/rest/v1/events",
+    headers=headers,
+    json={
+        "device_id": DEVICE_ID,
+        "event_type": "safe_face_recognized",
+        "severity": "low",
+    }
+)
+
+# Unknown person at door
+requests.post(
+    f"{SUPABASE_URL}/rest/v1/events",
+    headers=headers,
+    json={
+        "device_id": DEVICE_ID,
+        "event_type": "unknown_face_detected",
+        "severity": "high",
+    }
+)
+
+# Child woke up
+requests.post(
+    f"{SUPABASE_URL}/rest/v1/events",
+    headers=headers,
+    json={
+        "device_id": DEVICE_ID,
+        "event_type": "child_awake",
+        "severity": "high",
     }
 )
 ```

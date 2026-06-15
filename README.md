@@ -1,16 +1,44 @@
-# React + Vite
+# BSAFE Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React/Vite dashboard for camera, door, and AI vision security events.
 
-Currently, two official plugins are available:
+## Local Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Copy `.env.example` to `.env` and fill in the required values.
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## EmailJS Alerts
 
-## Expanding the ESLint configuration
+The app sends alert emails through EmailJS when:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- AI vision detects a new `person`, `dog`, or `cat` in the live feed.
+- A Supabase `events` row is inserted with `event_type = door`.
+
+Create one EmailJS template and add these variables to the template:
+
+```text
+{{app_name}}
+{{alert_title}}
+{{alert_message}}
+{{alert_type}}
+{{event_type}}
+{{object_class}}
+{{device_name}}
+{{severity}}
+{{time}}
+{{details}}
+```
+
+Then add your EmailJS values to `.env`:
+
+```text
+VITE_EMAILJS_SERVICE_ID=your_service_id
+VITE_EMAILJS_TEMPLATE_ID=your_template_id
+VITE_EMAILJS_PUBLIC_KEY=your_public_key
+```
+
+Restart `npm run dev` after changing `.env`.

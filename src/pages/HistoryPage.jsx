@@ -14,6 +14,7 @@ export default function HistoryPage() {
     const [devices, setDevices] = useState([])
     const [filterDev, setFilterDev] = useState('all')
     const newEventIds = useRef(new Set())
+    const timeoutRef = useRef(null)
     const { addToast } = useToast()
 
     useEffect(() => {
@@ -50,7 +51,7 @@ export default function HistoryPage() {
                     })
 
                     // Remove "new" highlight after 2s
-                    setTimeout(() => {
+                    timeoutRef.current = setTimeout(() => {
                         newEventIds.current.delete(data.id)
                         setEvents(prev => [...prev])
                     }, 2000)
@@ -58,7 +59,10 @@ export default function HistoryPage() {
             })
             .subscribe()
 
-        return () => supabase.removeChannel(channel)
+        return () => {
+            supabase.removeChannel(channel)
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        }
     }, [])
 
     async function fetchEvents() {
@@ -100,18 +104,27 @@ export default function HistoryPage() {
         setLoading(false)
     }
 
+    // CSV injection prevention helper
+    function escapeCSV(value) {
+        const str = String(value ?? '')
+        // Prefix values starting with formula-triggering characters
+        const sanitized = /^[=+\-@\t\r]/.test(str) ? "'" + str : str
+        // Wrap in double quotes, escaping internal double quotes
+        return '"' + sanitized.replace(/"/g, '""') + '"'
+    }
+
     // CSV export
     function exportCSV() {
         const rows = [
-            ['ID', 'Device', 'Event Source', 'Event Type/Object', 'Severity', 'Duration (Seconds)', 'Created At'],
+            ['ID', 'Device', 'Event Source', 'Event Type/Object', 'Severity', 'Duration (Seconds)', 'Created At'].map(escapeCSV),
             ...filtered.map(ev => [
-                ev.id,
-                ev.devices?.name || '',
-                ev.is_ai ? 'AI Vision' : 'Hardware Sensor',
-                ev.event_type,
-                ev.severity,
-                ev.is_ai ? ev.duration : 'N/A',
-                format(new Date(ev.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                escapeCSV(ev.id),
+                escapeCSV(ev.devices?.name || ''),
+                escapeCSV(ev.is_ai ? 'AI Vision' : 'Hardware Sensor'),
+                escapeCSV(ev.event_type),
+                escapeCSV(ev.severity),
+                escapeCSV(ev.is_ai ? ev.duration : 'N/A'),
+                escapeCSV(format(new Date(ev.created_at), 'yyyy-MM-dd HH:mm:ss')),
             ])
         ]
         const csv = rows.map(r => r.join(',')).join('\n')
@@ -132,7 +145,7 @@ export default function HistoryPage() {
     return (
         <div>
             {/* Toolbar */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="page-toolbar">
                 <Filter size={14} color="var(--text-muted)" />
                 <Select value={filterType} onChange={setFilterType}>
                     <option value="all">All Types</option>
@@ -148,7 +161,7 @@ export default function HistoryPage() {
                     <option value="all">All Devices</option>
                     {devices.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </Select>
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="page-toolbar-actions">
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
                         {filtered.length} events
                     </span>

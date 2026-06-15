@@ -10,8 +10,8 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false, // For simplicity in this local app. In prod with remote content, this should be true.
+      nodeIntegration: false,
+      contextIsolation: true,
     },
     // macOS specific styling
     titleBarStyle: 'hiddenInset',

@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
 import { formatDistanceToNow, format } from 'date-fns'
-import { Maximize2, Minimize2, Camera, Wifi, Save, Volume2, Mic, Lightbulb, BrainCircuit } from 'lucide-react'
+import { Maximize2, Minimize2, Camera, Wifi, Save, Volume2, Mic, Lightbulb, BrainCircuit, RefreshCw } from 'lucide-react'
 import { computeMotionSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
 import { useToast } from '../toastContext'
+import { sendSecurityAlertEmail } from '../alertEmail'
 import * as tf from '@tensorflow/tfjs'
 import * as cocoSsd from '@tensorflow-models/coco-ssd'
-import emailjs from '@emailjs/browser'
 
 export default function LiveFeedPage() {
     const [devices, setDevices] = useState([])
     const [configs, setConfigs] = useState({}) // keyed by device_id
     const [selectedId, setSelectedId] = useState(null)
     const [streamError, setStreamError] = useState(false)
+    const [streamReloadKey, setStreamReloadKey] = useState(0)
+    const [retryingStream, setRetryingStream] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [events, setEvents] = useState([])
     const [loadingDevices, setLoadingDevices] = useState(true)
@@ -44,6 +46,7 @@ export default function LiveFeedPage() {
     const nextTrackerIdRef = useRef(1)
     const detectionLoopRef = useRef(null)
     const lastEmailSentRef = useRef(0) // timestamp of last email sent
+    const lastDetectTime = useRef(0)
 
     // ── Device Status & Stream State ─────────────────────────────────────────
     const selectedDevice = devices.find(d => d.id === selectedId) || null
@@ -59,7 +62,7 @@ export default function LiveFeedPage() {
 
     const DEVICE_STATUS = {
         online:  { label: 'Online',        color: 'var(--green)',      bg: 'rgba(16,185,129,0.12)', dot: 'var(--green)'       },
-        stale:   { label: 'Disconnected',  color: '#fbbf24',           bg: 'rgba(251,191,36,0.12)', dot: '#fbbf24'            },
+        stale:   { label: 'Disconnected',  color: 'var(--red)',        bg: 'rgba(239,68,68,0.10)',  dot: 'var(--red)'         },
         offline: { label: 'Offline',       color: 'var(--text-muted)', bg: 'var(--bg-hover)',       dot: 'var(--text-muted)'  },
     }
     const deviceStatus = DEVICE_STATUS[deviceStatusKey]
@@ -67,6 +70,88 @@ export default function LiveFeedPage() {
     const isOnline = deviceStatusKey === 'online'
     const hasStream = !!(selectedDevice?.stream_url)
     const streamLive = hasStream && !streamError && isOnline
+
+    function getStreamSrc(url) {
+        if (!url) return ''
+        if (!streamReloadKey) return url
+
+        try {
+            const parsedUrl = new URL(url, window.location.href)
+            parsedUrl.searchParams.set('retry', String(streamReloadKey))
+            return parsedUrl.toString()
+        } catch {
+            const separator = url.includes('?') ? '&' : '?'
+            return `${url}${separator}retry=${streamReloadKey}`
+        }
+    }
+
+    async function refreshSelectedDevice() {
+        if (!selectedId || retryingStream) return
+
+        setRetryingStream(true)
+        setStreamError(false)
+        setStreamReloadKey(Date.now())
+
+        const { data: device, error: deviceError } = await supabase
+            .from('devices')
+            .select('id, name, location, status, last_seen_at, stream_url')
+            .eq('id', selectedId)
+            .maybeSingle()
+
+        if (deviceError) {
+            addToast({
+                type: 'high',
+                title: 'Reconnect Failed',
+                message: deviceError.message,
+            })
+            setRetryingStream(false)
+            return
+        }
+
+        if (device) {
+            setDevices(prev => prev.map(item => item.id === selectedId ? device : item))
+        }
+
+        const { data: cfgData } = await supabase
+            .from('device_config')
+            .select('device_id, sensitivity, detection_cooldown, alert_enabled, buzzer_enabled, mic_enabled, led_enabled')
+            .eq('device_id', selectedId)
+            .maybeSingle()
+
+        if (cfgData) {
+            setConfigs(prev => ({ ...prev, [selectedId]: cfgData }))
+        }
+
+        const { data: eventData } = await supabase
+            .from('events')
+            .select('id, event_type, severity, created_at')
+            .eq('device_id', selectedId)
+            .order('created_at', { ascending: false })
+            .limit(8)
+
+        setEvents(eventData || [])
+
+        const refreshedLastSeen = device?.last_seen_at ? new Date(device.last_seen_at) : null
+        const refreshedOnline = device?.status === 'online'
+            && refreshedLastSeen
+            && (Date.now() - refreshedLastSeen.getTime()) <= STALE_MS
+
+        if (refreshedOnline && device?.stream_url) {
+            addToast({
+                type: 'low',
+                title: 'Connection Refreshed',
+                message: 'Device status and stream were refreshed.',
+            })
+        } else {
+            addToast({
+                type: 'medium',
+                title: 'Device Still Offline',
+                message: 'No fresh heartbeat from the hardware yet. Check ESP32 power, Wi-Fi, and stream URL.',
+            })
+        }
+
+        setRetryingStream(false)
+    }
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -116,6 +201,13 @@ export default function LiveFeedPage() {
 
         async function analyzeFrame() {
             if (!running) return
+
+            const now = performance.now()
+            if (now - lastDetectTime.current < 250) {
+                detectionLoopRef.current = requestAnimationFrame(analyzeFrame)
+                return
+            }
+            lastDetectTime.current = now
 
             const img = streamImgRef.current
             const canvas = aiCanvasRef.current
@@ -168,10 +260,10 @@ export default function LiveFeedPage() {
                             }
                             
                             // Log to UI Terminal
-                            setAiTerminalLog(prev => [`[${format(now, 'HH:mm:ss')}] > New ${pred.class.toUpperCase()} detected (ID: ${tId})`, ...prev].slice(0, 20))
+                            setAiTerminalLog(prev => [{ id: Date.now() + Math.random(), text: `[${format(now, 'HH:mm:ss')}] > New ${pred.class.toUpperCase()} detected (ID: ${tId})` }, ...prev].slice(0, 20))
                             
                             // Native Desktop Notification
-                            if ('Notification' in window && Notification.permission === 'granted') {
+                            if (selectedConfig?.alert_enabled !== false && 'Notification' in window && Notification.permission === 'granted') {
                                 new Notification(`NexusShield Alert`, {
                                     body: `${pred.class.toUpperCase()} detected on ${selectedDevice?.name || 'Camera'}!`,
                                     icon: '/vite.svg'
@@ -180,22 +272,22 @@ export default function LiveFeedPage() {
                             
                             // EmailJS Notification (with cooldown)
                             const cooldownMs = (selectedConfig?.detection_cooldown || 30) * 1000
-                            if (now.getTime() - lastEmailSentRef.current > cooldownMs) {
+                            if (selectedConfig?.alert_enabled !== false && now.getTime() - lastEmailSentRef.current > cooldownMs) {
                                 lastEmailSentRef.current = now.getTime()
-                                
-                                // To make this work, replace these with your actual EmailJS keys
-                                emailjs.send(
-                                    'service_gewyj2y', 
-                                    'template_tpovemp', 
-                                    {
-                                        object_class: pred.class.toUpperCase(),
-                                        device_name: selectedDevice?.name || 'Camera',
-                                        time: format(now, 'HH:mm:ss')
-                                    }, 
-                                    'Zmdyuo3yIL4Iav2ZU'
-                                ).then(
-                                    () => console.log('SUCCESS: Email sent via EmailJS'),
-                                    (error) => console.log('FAILED to send email via EmailJS (Did you add your keys?)', error)
+
+                                sendSecurityAlertEmail({
+                                    alertTitle: `${pred.class.toUpperCase()} detected`,
+                                    alertMessage: `${pred.class.toUpperCase()} detected on ${selectedDevice?.name || 'Camera'}`,
+                                    alertType: pred.class,
+                                    eventType: 'ai_detection',
+                                    objectClass: pred.class,
+                                    deviceName: selectedDevice?.name || 'Camera',
+                                    severity: pred.class === 'person' ? 'high' : 'medium',
+                                    time: format(now, 'yyyy-MM-dd HH:mm:ss'),
+                                    details: `AI confidence: ${Math.round(pred.score * 100)}%`,
+                                }).then(
+                                    () => console.log('SUCCESS: Alert email sent'),
+                                    (error) => console.log('FAILED to send alert email', error)
                                 )
                             }
                         }
@@ -224,8 +316,7 @@ export default function LiveFeedPage() {
                         ctx.fillStyle = '#00ff00'
                         ctx.fillRect(drawX, drawY - 20, drawW, 20)
                         ctx.fillStyle = '#000000'
-                        ctx.font = '12px monospace'
-                        ctx.fontWeight = 'bold'
+                        ctx.font = 'bold 12px monospace'
                         ctx.fillText(`${pred.class.toUpperCase()} #${tId}`, drawX + 4, drawY - 6)
                     }
 
@@ -237,7 +328,7 @@ export default function LiveFeedPage() {
                                 // Object has been gone for 5 seconds. Log it and remove it.
                                 const duration = Math.round((tracker.last_seen - tracker.first_seen) / 1000)
                                 
-                                setAiTerminalLog(prev => [`[${format(now, 'HH:mm:ss')}] > ${tracker.class.toUpperCase()} #${tId} left. Stayed ${duration}s`, ...prev].slice(0, 20))
+                                setAiTerminalLog(prev => [{ id: Date.now() + Math.random(), text: `[${format(now, 'HH:mm:ss')}] > ${tracker.class.toUpperCase()} #${tId} left. Stayed ${duration}s` }, ...prev].slice(0, 20))
                                 
                                 // Fire and forget upload to Supabase
                                 supabase.from('tracking_events').insert({
@@ -384,7 +475,7 @@ export default function LiveFeedPage() {
 
     // ── Save config handler ───────────────────────────────────────────────
     async function saveConfig() {
-        if (!selectedId) return
+        if (!selectedId || !isOnline) return
         setSavingConfig(true)
         const payload = {
             device_id: selectedId,
@@ -426,16 +517,11 @@ export default function LiveFeedPage() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+        <div className="live-feed-page">
 
             {/* ── Camera selector bar ─────────────────────────────────────── */}
             {devices.length > 1 && (
-                <div style={{
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                }}>
+                <div className="camera-selector-bar">
                     <span style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 10,
@@ -488,25 +574,17 @@ export default function LiveFeedPage() {
             <div className={`monitor-grid${isFullscreen ? ' fullscreen' : ''}`}>
 
                 {/* ── LEFT: Stream area ─────────────────────────────────── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+                <div className="stream-column">
 
                     {/* Stream container */}
-                    <div style={{
-                        position: 'relative',
-                        flex: 1,
-                        minHeight: 320,
-                        background: 'var(--bg-elevated)',
-                        borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--border)',
-                        overflow: 'hidden',
-                    }}>
+                    <div className="stream-panel">
                         {/* Stream or offline overlay */}
                         {streamLive ? (
                             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                                 <img
                                     ref={streamImgRef}
-                                    key={selectedDevice?.stream_url}
-                                    src={selectedDevice.stream_url}
+                                    key={`${selectedDevice?.stream_url || ''}-${streamReloadKey}`}
+                                    src={getStreamSrc(selectedDevice.stream_url)}
                                     crossOrigin="anonymous"
                                     alt="Live Stream"
                                     onError={() => setStreamError(true)}
@@ -567,7 +645,7 @@ export default function LiveFeedPage() {
                                 {/* Removed old placeholder since we have the native canvas now */}
                             </div>
                         ) : (
-                            <OfflineOverlay />
+                            <OfflineOverlay onRetry={refreshSelectedDevice} retrying={retryingStream} />
                         )}
 
                         {/* Fullscreen toggle */}
@@ -635,22 +713,13 @@ export default function LiveFeedPage() {
                     </div>
 
                     {/* ── Status bar ───────────────────────────────────── */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 20,
-                        padding: '10px 16px',
-                        background: 'var(--bg-surface)',
-                        borderRadius: 'var(--radius)',
-                        border: '1px solid var(--border)',
-                        flexWrap: 'wrap',
-                    }}>
+                    <div className="live-status-bar">
                         {/* Device name */}
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>
+                        <div className="live-status-device">
+                            <div className="live-status-device-name">
                                 {selectedDevice?.name || '—'}
                             </div>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                            <div className="live-status-device-location">
                                 {selectedDevice?.location || 'No location'}
                             </div>
                         </div>
@@ -674,7 +743,7 @@ export default function LiveFeedPage() {
                             />
                         )}
 
-                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div className="live-status-spacer">
                             <Wifi size={13} color={streamLive ? 'var(--green)' : 'var(--text-muted)'} />
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: streamLive ? 'var(--green)' : 'var(--text-muted)' }}>
                                 {streamLive ? 'Stream OK' : 'No Signal'}
@@ -685,7 +754,7 @@ export default function LiveFeedPage() {
 
                 {/* ── RIGHT: Info + Events panel ───────────────────────── */}
                 {!isFullscreen && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', paddingRight: 4, paddingBottom: 14 }}>
+                    <div className="monitor-side-panel">
 
                         {/* Device Info card */}
                         <div className="card" style={{ flexShrink: 0 }}>
@@ -720,7 +789,12 @@ export default function LiveFeedPage() {
                                 <span className="card-title">Device Actions</span>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div className={!isOnline ? 'disabled-control-group' : ''} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                {!isOnline && (
+                                    <div className="control-disabled-note">
+                                        Device controls are disabled until this device reconnects.
+                                    </div>
+                                )}
                                 {/* Buzzer */}
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -733,6 +807,7 @@ export default function LiveFeedPage() {
                                         <input
                                             type="checkbox"
                                             checked={editBuzzerEnabled}
+                                            disabled={!isOnline}
                                             onChange={e => {
                                                 setEditBuzzerEnabled(e.target.checked)
                                                 setConfigDirty(true)
@@ -754,6 +829,7 @@ export default function LiveFeedPage() {
                                         <input
                                             type="checkbox"
                                             checked={editMicEnabled}
+                                            disabled={!isOnline}
                                             onChange={e => {
                                                 setEditMicEnabled(e.target.checked)
                                                 setConfigDirty(true)
@@ -775,6 +851,7 @@ export default function LiveFeedPage() {
                                         <input
                                             type="checkbox"
                                             checked={editLedEnabled}
+                                            disabled={!isOnline}
                                             onChange={e => {
                                                 setEditLedEnabled(e.target.checked)
                                                 setConfigDirty(true)
@@ -821,6 +898,7 @@ export default function LiveFeedPage() {
                                         max={10}
                                         step={1}
                                         value={editSensitivity}
+                                        disabled={!isOnline}
                                         onChange={e => {
                                             setEditSensitivity(Number(e.target.value))
                                             setConfigDirty(true)
@@ -858,6 +936,7 @@ export default function LiveFeedPage() {
                                             min={0}
                                             max={600}
                                             value={editCooldown}
+                                            disabled={!isOnline}
                                             onChange={e => {
                                                 setEditCooldown(Number(e.target.value))
                                                 setConfigDirty(true)
@@ -885,6 +964,7 @@ export default function LiveFeedPage() {
                                         <input
                                             type="checkbox"
                                             checked={editAlertEnabled}
+                                            disabled={!isOnline}
                                             onChange={e => {
                                                 setEditAlertEnabled(e.target.checked)
                                                 setConfigDirty(true)
@@ -898,9 +978,9 @@ export default function LiveFeedPage() {
                                 <button
                                     className="btn btn-primary"
                                     onClick={saveConfig}
-                                    disabled={savingConfig || !configDirty}
+                                    disabled={savingConfig || !configDirty || !isOnline}
                                     style={{
-                                        opacity: (!configDirty || savingConfig) ? 0.5 : 1,
+                                        opacity: (!configDirty || savingConfig || !isOnline) ? 0.5 : 1,
                                         justifyContent: 'center',
                                     }}
                                 >
@@ -913,39 +993,32 @@ export default function LiveFeedPage() {
                         </div>
 
                         {/* AI Event Terminal card */}
-                        <div className="card" style={{ flex: 1, minHeight: 200, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0, background: '#0a0a0a', border: '1px solid #333' }}>
-                            <div className="card-header" style={{ padding: '14px 16px 0', marginBottom: 0, borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="card ai-debug-card">
+                            <div className="card-header ai-debug-header">
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                    <span className="card-title" style={{ color: '#0f0', fontFamily: 'var(--font-mono)' }}>AI_VISION_TERMINAL</span>
-                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>REALTIME</span>
+                                    <span className="card-title">AI Vision Activity</span>
+                                    <span className="ai-debug-kicker">Realtime</span>
                                 </div>
                                 {aiLoading ? (
-                                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-quaternary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span className="ai-debug-status">
                                         <div className="spinner" style={{ width: 10, height: 10, borderWidth: 2 }} /> Loading...
                                     </span>
                                 ) : (
-                                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#0f0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span className="ai-debug-status online">
                                         <BrainCircuit size={12} /> ONLINE
                                     </span>
                                 )}
                             </div>
 
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0 4px' }}>
+                            <div className="ai-debug-log">
                                 {aiTerminalLog.length === 0 ? (
                                     <div className="empty-state" style={{ padding: '28px 16px' }}>
                                         {aiLoading ? 'Initializing AI Engine...' : 'Waiting for detections...'}
                                     </div>
                                 ) : (
-                                    aiTerminalLog.map((logStr, i) => (
-                                        <div key={i} className="new-row" style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 10,
-                                            padding: '4px 16px',
-                                        }}>
-                                            <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color: '#0f0' }}>
-                                                {logStr}
-                                            </span>
+                                    aiTerminalLog.map((logEntry) => (
+                                        <div key={logEntry.id} className="ai-debug-log-row new-row">
+                                            {logEntry.text}
                                         </div>
                                     ))
                                 )}
@@ -960,7 +1033,7 @@ export default function LiveFeedPage() {
 }
 
 // ── Offline overlay ────────────────────────────────────────────────────────
-function OfflineOverlay() {
+function OfflineOverlay({ onRetry, retrying }) {
     return (
         <div style={{
             display: 'flex',
@@ -989,15 +1062,26 @@ function OfflineOverlay() {
                 Stream Unavailable
             </div>
             <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
+                fontSize: 13,
                 color: 'var(--text-muted)',
                 textAlign: 'center',
-                maxWidth: 240,
+                maxWidth: 260,
                 lineHeight: 1.6,
             }}>
                 Device may be outside your network range
             </div>
+            <button className="btn" onClick={onRetry} disabled={retrying}>
+                {retrying ? (
+                    <>
+                        <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        Checking...
+                    </>
+                ) : (
+                    <>
+                        <RefreshCw size={14} /> Retry Connection
+                    </>
+                )}
+            </button>
         </div>
     )
 }
@@ -1005,11 +1089,11 @@ function OfflineOverlay() {
 // ── Status pill for status bar ─────────────────────────────────────────────
 function StatusPill({ label, value, color }) {
     return (
-        <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>
+        <div className="status-pill">
+            <div className="status-pill-label">
                 {label}
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color }}>
+            <div className="status-pill-value" style={{ color }}>
                 {value}
             </div>
         </div>
@@ -1019,11 +1103,11 @@ function StatusPill({ label, value, color }) {
 // ── Info row for device info panel ─────────────────────────────────────────
 function InfoRow({ label, value }) {
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0 }}>
+        <div className="info-row">
+            <span className="info-row-label">
                 {label}
             </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', textAlign: 'right', wordBreak: 'break-word' }}>
+            <span className="info-row-value">
                 {value}
             </span>
         </div>

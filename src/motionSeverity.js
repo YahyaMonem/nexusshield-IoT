@@ -17,6 +17,12 @@ const SECURITY_EVENT_TYPES = new Set([
     'motion',
     'door',
     'person_detected',
+    'dog_detected',
+    'cat_detected',
+    'safe_face_recognized',
+    'unknown_face_detected',
+    'child_awake',
+    'child_movement',
     'system_error',
 ])
 

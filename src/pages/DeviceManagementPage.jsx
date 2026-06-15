@@ -29,6 +29,7 @@ export default function DeviceManagementPage() {
     }, [])
 
     async function fetchProfile() {
+        if (!session?.user?.id) return
         const { data } = await supabase
             .from('profiles')
             .select('role')
@@ -38,6 +39,7 @@ export default function DeviceManagementPage() {
     }
 
     async function fetchDevices() {
+        if (!session?.user?.id) return
         const { data, error } = await supabase
             .from('devices')
             .select('*')
@@ -168,7 +170,7 @@ export default function DeviceManagementPage() {
     return (
         <div>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div className="page-toolbar page-toolbar--spaced">
                 <div>
                     <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
                         {devices.length} device{devices.length !== 1 ? 's' : ''} registered

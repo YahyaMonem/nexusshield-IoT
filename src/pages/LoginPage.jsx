@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { Shield, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
     const navigate = useNavigate()
@@ -10,18 +10,33 @@ export default function LoginPage() {
     const [showPw, setShowPw] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [isSignUp, setIsSignUp] = useState(false)
 
-    const handleLogin = async () => {
+    const handleAuth = async () => {
         if (!email || !password) { setError('Please fill in all fields'); return }
         setLoading(true)
         setError(null)
 
-        const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-        if (err) {
-            setError(err.message)
-            setLoading(false)
+        if (isSignUp) {
+            const { error: err } = await supabase.auth.signUp({ email, password })
+            if (err) {
+                setError(err.message)
+                setLoading(false)
+            } else {
+                // If email confirmation is required, you might need to show a message here.
+                // Assuming auto-login or simple redirect for now.
+                setLoading(false)
+                navigate('/')
+            }
         } else {
-            navigate('/')
+            const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+            if (err) {
+                setError(err.message)
+                setLoading(false)
+            } else {
+                setLoading(false)
+                navigate('/')
+            }
         }
     }
 
@@ -42,15 +57,17 @@ export default function LoginPage() {
                 <div style={{ width: '100%', maxWidth: 360 }}>
                     {/* Logo */}
                     <div style={{ marginBottom: 32 }}>
-                        <div style={{
-                            width: 48, height: 48,
-                            background: 'var(--brand-50)',
-                            border: '1px solid var(--brand-100)',
-                            borderRadius: 12,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            marginBottom: 24,
-                        }}>
-                            <Shield size={24} color="var(--brand-600)" />
+                        <div 
+                            style={{
+                                height: 48,
+                                display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+                                marginBottom: 24,
+                                cursor: 'pointer',
+                            }}
+                            onClick={() => navigate('/')}
+                            title="Click to refresh page and logo"
+                        >
+                            <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '48px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} />
                         </div>
                         <h1 style={{
                             fontSize: 24,
@@ -59,14 +76,14 @@ export default function LoginPage() {
                             marginBottom: 8,
                             letterSpacing: '-0.02em',
                         }}>
-                            Log in to your account
+                            {isSignUp ? 'Create an account' : 'Log in to your account'}
                         </h1>
                         <p style={{
                             fontSize: 16,
                             color: 'var(--text-tertiary)',
                             lineHeight: 1.5,
                         }}>
-                            Welcome back! Please enter your details.
+                            {isSignUp ? 'Enter your details below to get started.' : 'Welcome back! Please enter your details.'}
                         </p>
                     </div>
 
@@ -80,7 +97,7 @@ export default function LoginPage() {
                                 placeholder="Enter your email"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                                onKeyDown={e => e.key === 'Enter' && handleAuth()}
                             />
                         </div>
 
@@ -90,10 +107,10 @@ export default function LoginPage() {
                                 <input
                                     className="input"
                                     type={showPw ? 'text' : 'password'}
-                                    placeholder="Enter your password"
+                                    placeholder={isSignUp ? "Create a password" : "Enter your password"}
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                                    onKeyDown={e => e.key === 'Enter' && handleAuth()}
                                     style={{ paddingRight: 42 }}
                                 />
                                 <button
@@ -125,7 +142,7 @@ export default function LoginPage() {
 
                         <button
                             className="btn btn-primary"
-                            onClick={handleLogin}
+                            onClick={handleAuth}
                             disabled={loading}
                             style={{
                                 width: '100%',
@@ -135,8 +152,8 @@ export default function LoginPage() {
                             }}
                         >
                             {loading
-                                ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Signing in...</>
-                                : 'Sign in'
+                                ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> {isSignUp ? 'Signing up...' : 'Signing in...'}</>
+                                : (isSignUp ? 'Sign up' : 'Sign in')
                             }
                         </button>
                     </div>
@@ -147,10 +164,22 @@ export default function LoginPage() {
                         fontSize: 14,
                         color: 'var(--text-quaternary)',
                     }}>
-                        Don't have an account?{' '}
-                        <span style={{ color: 'var(--brand-600)', fontWeight: 600, cursor: 'pointer' }}>
-                            Contact your admin
-                        </span>
+                        {isSignUp ? "Already have an account?" : "Don't have an account?"}{' '}
+                        <button 
+                            onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
+                            style={{ 
+                                color: 'var(--brand-600)', 
+                                fontWeight: 600, 
+                                cursor: 'pointer',
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                fontSize: 'inherit',
+                                fontFamily: 'inherit'
+                            }}
+                        >
+                            {isSignUp ? "Log in" : "Sign up"}
+                        </button>
                     </p>
                 </div>
             </div>
@@ -169,14 +198,11 @@ export default function LoginPage() {
                 className="login-branding"
             >
                 <div style={{
-                    width: 80, height: 80,
-                    background: 'var(--brand-600)',
-                    borderRadius: 20,
+                    height: 80,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     marginBottom: 32,
-                    boxShadow: '0 8px 32px rgba(105, 65, 198, 0.25)',
                 }}>
-                    <Shield size={40} color="white" />
+                    <img src="/logos/nexusshield.png" alt="NexusShield Logo" style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', borderRadius: '12px' }} />
                 </div>
                 <h2 style={{
                     fontSize: 28,
