@@ -36,13 +36,13 @@ export default function NotificationBell() {
         async function fetchInitialEvents() {
             try {
                 // Fetch tracking events
-                const { data } = await supabase
-                    .from('tracking_events')
-                    .select('id, object_class, duration_seconds, created_at, first_seen_at')
-                    .order('created_at', { ascending: false })
-                    .limit(20)
+                // const { data } = await supabase
+                //     .from('tracking_events')
+                //     .select('id, object_class, duration_seconds, created_at, first_seen_at')
+                //     .order('created_at', { ascending: false })
+                //     .limit(20)
 
-                const evs = data || []
+                const evs = [] // data || []
                 setEvents(evs)
 
                 const lastViewed = getLastViewed()

@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase, EVENT_TYPES, SEVERITY } from '../supabaseClient'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Activity, Camera, AlertTriangle, Clock, Search, Plus, UserCheck } from 'lucide-react'
 import { useToast } from '../toastContext'
 import { computeMotionSeverity, MOTION_SEVERITY_META } from '../motionSeverity'
+import { useAuth } from '../authContext'
+import { sendTelegramAlert } from '../alertTelegram'
 
 const STALE_MS = 2 * 60 * 1000
 
@@ -21,6 +23,7 @@ function countOnlineDevices(devices) {
 }
 
 export default function DashboardPage() {
+    const { session } = useAuth()
     const [stats, setStats] = useState({ todayEvents: 0, activeDevices: 0, highSeverity: 0, lastEvent: null })
     const [recentEvents, setRecent] = useState([])
     const [devices, setDevices] = useState([])
@@ -33,13 +36,16 @@ export default function DashboardPage() {
     const [channelStatus, setChannelStatus] = useState('CONNECTING')
     const { addToast } = useToast()
 
+    // Telegram prefs — kept in a ref so the Realtime closure always reads the latest value
+    const telegramRef = useRef({ chatId: '', enabled: false })
+
     useEffect(() => {
         let isMounted = true;
 
         async function fetchAll() {
             const today = new Date(); today.setHours(0, 0, 0, 0)
 
-            const [eventsRes, devicesRes, recentRes, highRes, facesRes] = await Promise.all([
+            const [eventsRes, devicesRes, recentRes, highRes, facesRes, profRes] = await Promise.all([
                 supabase.from('events').select('id', { count: 'exact' })
                     .gte('created_at', today.toISOString()),
                 supabase.from('devices').select('*'),
@@ -48,6 +54,11 @@ export default function DashboardPage() {
                 supabase.from('events').select('id', { count: 'exact' })
                     .eq('severity', 'high').gte('created_at', today.toISOString()),
                 supabase.from('known_faces').select('*').order('created_at', { ascending: false }),
+                // Temporarily disabled to prevent 400 schema error during demo
+                // supabase.from('profiles')
+                //     .select('telegram_chat_id, telegram_enabled')
+                //     .eq('id', session.user.id)
+                //     .maybeSingle(),
             ])
 
             if (isMounted) {
@@ -64,6 +75,12 @@ export default function DashboardPage() {
                 setRecent(recentRes.data || [])
                 setFaces(facesRes.data || [])
                 setLoading(false)
+
+                // TEMPORARY FALLBACK FOR LIVE DEMO
+                telegramRef.current = {
+                    chatId: '632088249',
+                    enabled: true,
+                }
             }
         }
 
@@ -114,6 +131,18 @@ export default function DashboardPage() {
                             ? `Detected on ${newEvent.devices.name}`
                             : 'New security event',
                     })
+
+                    // ── Telegram notification ─────────────────────────────
+                    const { chatId, enabled } = telegramRef.current
+                    if (enabled && chatId) {
+                        sendTelegramAlert({
+                            chatId,
+                            title:      et?.label || newEvent.event_type,
+                            deviceName: newEvent.devices?.name || 'Unknown Device',
+                            severity:   newEvent.severity || 'low',
+                            time:       format(new Date(newEvent.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                        })
+                    }
                 }
             })
             .subscribe((status, err) => {
@@ -205,8 +234,8 @@ export default function DashboardPage() {
                 <div className="card">
                     <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span className="card-title">Recent Events</span>
-                        <button className="btn btn-primary" onClick={handleTestEvent} style={{ padding: '4px 10px', fontSize: 12 }}>
-                            Test Event & Email
+                        <button className="btn btn-primary" onClick={handleTestEvent} style={{ padding: '4px 10px', fontSize: 12 }} title="Inserts a test motion event, triggering a Telegram alert.">
+                            Test Telegram Alert
                         </button>
                     </div>
                     {recentEvents.length === 0

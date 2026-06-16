@@ -32,7 +32,6 @@
     }
   },
   "dependencies": {
-    "@emailjs/browser": "^4.4.1",
     "@eslint/js": "^10.0.1",
     "@supabase/supabase-js": "^2.39.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",

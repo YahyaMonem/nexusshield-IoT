@@ -18,7 +18,6 @@ import SettingsPage from './pages/SettingsPage'
 import DeviceManagementPage from './pages/DeviceManagementPage'
 import UserManagementPage from './pages/UserManagementPage'
 import NotificationBell from './components/NotificationBell'
-import { sendSecurityAlertEmail } from './alertEmail'
 
 import { AuthContext, useAuth } from './authContext'
 import { ToastProvider, useToast } from './toastContext'
@@ -188,81 +187,6 @@ const PAGE_TITLES = {
   '/settings':  'Settings',
 }
 
-const EMAIL_ALERT_EVENTS = new Set([
-  'door',
-  'person_detected',
-  'dog_detected',
-  'cat_detected',
-  'unknown_face_detected',
-  'child_awake',
-  'child_movement',
-])
-
-function buildSecurityEmailPayload(event) {
-  const deviceName = event.devices?.name || 'Unknown device'
-
-  switch (event.event_type) {
-    case 'door':
-      return {
-        alertTitle: 'Door opened',
-        alertMessage: `Door opened on ${deviceName}`,
-        alertType: 'door',
-        objectClass: 'Door',
-        details: 'Door sensor reported an open event.',
-      }
-    case 'person_detected':
-      return {
-        alertTitle: 'Person detected',
-        alertMessage: `Person detected on ${deviceName}`,
-        alertType: 'person',
-        objectClass: 'Person',
-        details: 'Human presence detected by the edge device.',
-      }
-    case 'dog_detected':
-    case 'cat_detected': {
-      const animal = event.event_type === 'dog_detected' ? 'Dog' : 'Cat'
-      return {
-        alertTitle: `${animal} detected`,
-        alertMessage: `${animal} detected on ${deviceName}`,
-        alertType: 'pet',
-        objectClass: animal,
-        details: 'Pet movement detected by the edge device.',
-      }
-    }
-    case 'unknown_face_detected':
-      return {
-        alertTitle: 'Unknown face detected',
-        alertMessage: `Unknown face detected on ${deviceName}`,
-        alertType: 'unknown_face',
-        objectClass: 'Unknown Face',
-        details: 'Face recognition did not match a trusted person.',
-      }
-    case 'child_awake':
-      return {
-        alertTitle: 'Child awake',
-        alertMessage: `Child awake detected on ${deviceName}`,
-        alertType: 'child_monitor',
-        objectClass: 'Child',
-        details: 'Child monitoring rule detected waking or sustained movement.',
-      }
-    case 'child_movement':
-      return {
-        alertTitle: 'Child movement detected',
-        alertMessage: `Child movement detected on ${deviceName}`,
-        alertType: 'child_monitor',
-        objectClass: 'Child',
-        details: 'Child monitoring rule detected movement.',
-      }
-    default:
-      return {
-        alertTitle: 'Security Alert',
-        alertMessage: `Security event detected on ${deviceName}`,
-        alertType: 'security',
-        objectClass: 'Unknown',
-        details: 'Security event reported by the edge device.',
-      }
-  }
-}
 
 function Layout({ children }) {
   const { session } = useAuth()
@@ -273,16 +197,10 @@ function Layout({ children }) {
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [pendingInvite, setPendingInvite] = useState(null)
-  const emailedEventIdsRef = useRef(new Set())
-  const emailNotifsRef = useRef(false)
-
-  useEffect(() => {
-    emailNotifsRef.current = profile?.email_notifications
-  }, [profile])
 
   useEffect(() => {
     if (!session) return
-    supabase.from('profiles').select('full_name, role, email_notifications').eq('id', session.user.id).maybeSingle()
+    supabase.from('profiles').select('full_name, role').eq('id', session.user.id).maybeSingle()
       .then(({ data }) => setProfile(data))
 
     const channel = supabase.channel('health')
@@ -313,61 +231,6 @@ function Layout({ children }) {
     }
   }
 
-  useEffect(() => {
-    if (!session) return
-
-    const channel = supabase
-      .channel('global-alert-emails')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'events',
-      }, async (payload) => {
-        if (emailNotifsRef.current === false) return
-        if (emailedEventIdsRef.current.has(payload.new.id)) return
-
-        try {
-          const { data: event } = await supabase
-            .from('events')
-            .select('id, event_type, severity, created_at, devices(name)')
-            .eq('id', payload.new.id)
-            .single()
-
-          if (!event || !EMAIL_ALERT_EVENTS.has(event.event_type)) return
-
-          emailedEventIdsRef.current.add(event.id)
-          if (emailedEventIdsRef.current.size > 1000) emailedEventIdsRef.current.clear()
-          const emailPayload = buildSecurityEmailPayload(event)
-
-          sendSecurityAlertEmail({
-            ...emailPayload,
-            to_email: session.user.email,
-            eventType: event.event_type,
-            deviceName: event.devices?.name || 'Unknown device',
-            severity: event.severity,
-            time: new Date(event.created_at).toLocaleString(),
-          }).then(
-            (res) => {
-              console.log('SUCCESS: Security alert email sent', res)
-              if (res?.skipped) {
-                addToast({ type: 'low', title: 'Email Skipped', message: 'EmailJS keys missing or .env not loaded.' })
-              } else {
-                addToast({ type: 'success', title: 'Email Sent', message: 'EmailJS successfully sent the alert.' })
-              }
-            },
-            (error) => {
-              console.log('FAILED to send security alert email', error)
-              addToast({ type: 'high', title: 'Email Failed', message: error?.text || error?.message || 'Unknown EmailJS Error' })
-            }
-          )
-        } catch (error) {
-          console.error("Error processing global alert email:", error)
-        }
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
-  }, [session])
 
   useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
