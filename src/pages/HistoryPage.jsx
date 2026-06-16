@@ -161,7 +161,8 @@ export default function HistoryPage() {
                 <Filter size={14} color="var(--text-muted)" />
                 <Select value={filterType} onChange={setFilterType}>
                     <option value="all">All Types</option>
-                    {Object.entries(EVENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    <option value="motion">Motion</option>
+                    <option value="door">Door Opened</option>
                 </Select>
                 <Select value={filterSev} onChange={setFilterSev}>
                     <option value="all">All Severities</option>

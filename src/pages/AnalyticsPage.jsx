@@ -60,7 +60,7 @@ export default function AnalyticsPage() {
             const from = subDays(new Date(), days).toISOString()
 
             const [eventsRes, trackingRes, devicesRes] = await Promise.all([
-                supabase.from('events').select('event_type, severity, created_at, device_id').gte('created_at', from),
+                supabase.from('events').select('id, event_type, severity, created_at, device_id').gte('created_at', from),
                 supabase.from('tracking_events').select('object_class, created_at, device_id').gte('created_at', from),
                 supabase.from('devices').select('id, name'),
             ])

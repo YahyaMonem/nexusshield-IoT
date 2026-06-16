@@ -250,7 +250,7 @@ export default function SettingsPage() {
                             </span>
                         </div>
 
-                        <div style={{
+                        {/* <div style={{
                             padding: '12px 14px',
                             background: 'var(--brand-50)',
                             border: '1px solid var(--brand-200)',
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                                 Telegram bot message sending is handled by a <strong>secure backend</strong> (Supabase Edge Function or edge device script).
                                 <strong style={{ color: 'var(--red)' }}> Never put the bot token in the frontend.</strong>
                             </div>
-                        </div>
+                        </div> */}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <ToggleRow
@@ -320,13 +320,13 @@ export default function SettingsPage() {
                 <div>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                         {[
-                            { key: 'all',    label: 'All',    color: 'var(--text-secondary)' },
-                            { key: 'high',   label: 'High',   color: '#f87171' },
+                            { key: 'all', label: 'All', color: 'var(--text-secondary)' },
+                            { key: 'high', label: 'High', color: '#f87171' },
                             { key: 'medium', label: 'Medium', color: '#fbbf24' },
-                            { key: 'low',    label: 'Low',    color: '#60a5fa' },
-                            { key: 'info',   label: 'Info',   color: '#60a5fa' },
-                            { key: 'warn',   label: 'Warn',   color: 'var(--yellow)' },
-                            { key: 'error',  label: 'Error',  color: 'var(--red)' },
+                            { key: 'low', label: 'Low', color: '#60a5fa' },
+                            { key: 'info', label: 'Info', color: '#60a5fa' },
+                            { key: 'warn', label: 'Warn', color: 'var(--yellow)' },
+                            { key: 'error', label: 'Error', color: 'var(--red)' },
                         ].map(({ key, label, color }) => (
                             <button
                                 key={key}
@@ -364,7 +364,7 @@ export default function SettingsPage() {
                                     <tbody>
                                         {filteredLogs.map(log => {
                                             const sev = log._severity ? MOTION_SEVERITY_META[log._severity] : null
-                                            const lc  = sev || LOG_LEVELS[log.log_level] || { color: '#fff' }
+                                            const lc = sev || LOG_LEVELS[log.log_level] || { color: '#fff' }
                                             const displayLabel = sev ? sev.label : log.log_level
                                             return (
                                                 <tr key={log.id}>

@@ -200,7 +200,7 @@ export default function DashboardPage() {
                 />
             </div>
 
-            <div className="grid-2" style={{ marginTop: 8 }}>
+            <div className="grid-2" style={{ marginTop: 8, gridTemplateColumns: '65fr 35fr' }}>
                 {/* Recent Events */}
                 <div className="card">
                     <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -248,7 +248,7 @@ export default function DashboardPage() {
                                                     style={{ color: 'var(--text-quaternary)', fontSize: 13 }}
                                                     title={formatDistanceToNow(new Date(ev.created_at), { addSuffix: true })}
                                                 >
-                                                    {format(new Date(ev.created_at), 'E d MMM h:mm a')}
+                                                    {format(new Date(ev.created_at), 'HH:mm:ss')}
                                                 </td>
                                             </tr>
                                         )

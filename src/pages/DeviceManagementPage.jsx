@@ -168,14 +168,14 @@ export default function DeviceManagementPage() {
 
 
     const STATUS_STYLE = {
-        online:  { label: 'Online',  color: 'var(--green)',      bg: 'rgba(16,185,129,0.12)', dot: 'var(--green)'      },
-        offline: { label: 'Offline', color: 'var(--text-muted)', bg: 'var(--bg-hover)',       dot: 'var(--text-muted)' },
+        online: { label: 'Online', color: 'var(--green)', bg: 'rgba(16,185,129,0.12)', dot: 'var(--green)' },
+        offline: { label: 'Offline', color: 'var(--text-muted)', bg: 'var(--bg-hover)', dot: 'var(--text-muted)' },
     }
 
     return (
         <div>
             {/* Header */}
-            <div className="page-toolbar page-toolbar--spaced">
+            {/* <div className="page-toolbar page-toolbar--spaced">
                 <div>
                     <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
                         {devices.length} device{devices.length !== 1 ? 's' : ''} registered
@@ -184,7 +184,7 @@ export default function DeviceManagementPage() {
                 <button className="btn btn-primary" onClick={openAddModal}>
                     <Plus size={14} /> Add Device
                 </button>
-            </div>
+            </div> */}
 
             {/* Devices table */}
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
